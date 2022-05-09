@@ -58,10 +58,10 @@ This will connect, negociate and finally request the file quotes.txt which will 
 
 # TODO
 
-Write code to periodically poll FluxOs for a list of nodes and see if aany need config
-Add command line arguements to specify target (Node) and source (Vault) data directories
-Add configuration to which files the Node needs
-Add configuration to which apps tehVault supports
-Clean up code and insure raised execptions will be caught
-Add suitable log files to dignose run-time issues once deployed
-Explore a Windows GUI solution, right now it is command line only (Only tested on Ubuntu)
+- Write code to periodically poll FluxOs for a list of nodes and see if aany need config
+- Add command line arguements to specify target (Node) and source (Vault) data directories
+- Add configuration to which files the Node needs
+- Add configuration to which apps tehVault supports
+- Clean up code and insure raised execptions will be caught
+- Add suitable log files to dignose run-time issues once deployed
+- Explore a Windows GUI solution, right now it is command line only (Only tested on Ubuntu)
