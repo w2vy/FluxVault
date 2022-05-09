@@ -24,10 +24,11 @@ The communication flow is as follows:
 3. The Vault will use that Public Key to encrypt a message that contains and AES Key
 4. The Node will send a test message using the provided AES Key to the Vault
 5. If the Vault suceesfully decrypts the message it sends a Test Passed message, also encrypted.
-   All further messages are encrypted with this AES Key.
+   (All further messages are encrypted with this AES Key)
 6. The Node will send Request a message for a named file
 7. The Vault will return the contents of that file or an error status
-This repeats until the Node needs nothing else and sends a DONE message.
+
+Steps 6-7 repeat until the Node needs nothing else and sends a DONE message.
 
 At the socket level the messages are JSON strings terminated with Newline.
 
@@ -49,7 +50,7 @@ This will come up as a server and always be availble to the Vault. If a connecti
 
 In the Vault enter the command:
 
-./FLuxVault.py Vault 39898 127.0.0.1
+./FluxVault.py Vault 39898 127.0.0.1
 
 Where 39898 is the TCP port used and 127.0.0.1 is the IP address of the Flux Node where the App is running.
 
