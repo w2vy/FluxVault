@@ -30,7 +30,7 @@ The communication flow is as follows:
 
 Steps 6-7 repeat until the Node needs nothing else and sends a DONE message.
 
-At the socket level the messages are JSON strings terminated with Newline.
+At the socket level the messages are JSON strings terminated with Newline. Presently the maximum length of the JSON message is 4096, this could be increased but the data is limited to a single JSON structure.
 
 It is a simple proof of concept that can clearly be improved as well as implemented in other langauges as needed.
 
