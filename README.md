@@ -42,7 +42,7 @@ In the Proof of Concept form you can open two terminal windows, one as the Node 
 
 In the Node enter the command:
 
-./FluxVault.py Node 39898 localhost
+./FluxVault.py Node 39898 localhost quotes.txt
 
 Where 39898 is TCP port that will be used and localhost is the Domain name (or IP) that the Vault resides
 

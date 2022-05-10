@@ -10,10 +10,6 @@ import time
 
 VaultName = ""
 
-testdata = "I met aliens in UFO. Here is the map.".encode("utf-8")
-pubkey = open("receiver.pem").read()
-seckey = open("private.pem").read()
-
 def encrypt_data(keypem, data):
   key = RSA.import_key(keypem)
   session_key = get_random_bytes(16)
@@ -48,18 +44,6 @@ def decrypt_data(keypem, cipher):
   cipher_aes = AES.new(session_key, AES.MODE_EAX, nonce)
   data = cipher_aes.decrypt_and_verify(ciphertext, tag)
   return data
-
-#print("Source Data")
-#print(testdata)
-#secret = encrypt_data(pubkey, testdata)
-#print(secret)
-#print("Secret json")
-#secretj = json.dumps(secret)
-#print(secretj)
-#secret2 = json.loads(secretj)
-#known = decrypt_data(seckey, secret)
-#print("Destination Data");
-#print(known)
 
 def send_AESkey(keypem, aeskey):
   #print("encoded ", aeskey)
@@ -114,23 +98,6 @@ def send_receive(sock, request):
   #print(reply)
   return reply
 
-#akey = get_random_bytes(16)
-#print(type(akey), akey)
-#testdata = send_AESkey(pubkey, akey)
-#testdata = json.dumps(testdata)
-#key = receive_AESkey(seckey, testdata)
-#print(type(key), key)
-#xdata = {
-#  "Hello": "World",
-#  "Second": "Field",
-#  "Morse": "What hath God Wrought?"
-#}
-#print(xdata)
-#data = encrypt_aes_data(key, xdata)
-#print(data)
-#jdata = decrypt_aes_data(key, data)
-#print(jdata)
-
 CONNECTED = "CONNECTED"
 KEYSENT = "KEYSENT"
 STARTAES = "STARTAES"
@@ -138,7 +105,6 @@ READY = "READY"
 REQUEST = "REQUEST"
 DONE = "DONE"
 AESKEY = "AESKEY"
-
 
  # A server program which accepts requests from clients to capitalize strings. When
  # clients connect, a new thread is started to handle a client. The receiving of the
@@ -214,6 +180,7 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
                   jdata = decrypt_aes_data(nkData["AESKEY"], data)
                 if (jdata["State"] == "DATA"):
                   print(jdata["Body"])
+                  open(BOOTFILE, "w").write(jdata["Body"])
                   file_recd = True
                 # Send request for first (or next file)
                 # If no more we are Done (close connection?)
@@ -221,7 +188,7 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
                 if (file_recd):
                   jdata = { "State": DONE, "fill": random }
                 else:
-                  jdata = { "State": REQUEST, "FILE": "quotes.txt", "fill": random }
+                  jdata = { "State": REQUEST, "FILE": BOOTFILE, "fill": random }
                 reply = encrypt_aes_data(nkData["AESKEY"], jdata)
               #print("Reply: ", len(reply), " ", reply)
               if (len(reply) > 0):
@@ -232,12 +199,17 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
             break
         print(f'Closed: {client}')
 
-def NodeServer(port, vaultname):
+def NodeServer(port, vaultname, bootfile):
   global VaultName
   VaultName = vaultname
-  with ThreadedTCPServer(('', port), NodeKeyClient) as server:
-      print(f'The NodeKeyClient server is running on port 59898')
-      server.serve_forever()
+  global BOOTFILE
+  BOOTFILE = bootfile
+  if (len(BOOTFILE) > 0):
+    with ThreadedTCPServer(('', port), NodeKeyClient) as server:
+        print(f'The NodeKeyClient server is running on port 59898')
+        server.serve_forever()
+  else:
+    print("BOOTFILE missing from comamnd line, see usage")
 
 def NodeVault(port, AppIP):
   #print('# Creating socket')
@@ -314,7 +286,7 @@ def NodeVault(port, AppIP):
 # NodeVault port NodeIP
 usage = False
 
-if (len(sys.argv) == 4):
+if (len(sys.argv) > 3):
   try:
     port = int(sys.argv[2])
   except ValueError:
@@ -328,8 +300,9 @@ if (usage):
   sys.exit()
 
 print(sys.argv[1].upper(), sys.argv[1])
+
 if (sys.argv[1].upper() == "NODE"):
-  NodeServer(port, sys.argv[3])
+  NodeServer(port, sys.argv[3], sys.argv[4])
 else:
   NodeVault(port, sys.argv[3])
 
