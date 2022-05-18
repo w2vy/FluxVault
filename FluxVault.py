@@ -206,7 +206,7 @@ def NodeServer(port, vaultname, bootfile):
   BOOTFILE = bootfile
   if (len(BOOTFILE) > 0):
     with ThreadedTCPServer(('', port), NodeKeyClient) as server:
-        print(f'The NodeKeyClient server is running on port ' + port)
+        print(f'The NodeKeyClient server is running on port ' + str(port))
         server.serve_forever()
   else:
     print("BOOTFILE missing from comamnd line, see usage")
