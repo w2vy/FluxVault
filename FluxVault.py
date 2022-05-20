@@ -179,7 +179,7 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
                 else:
                   jdata = decrypt_aes_data(nkData["AESKEY"], data)
                 if (jdata["State"] == "DATA"):
-                  print(jdata["Body"])
+                  #print(jdata["Body"])
                   open(BOOTFILE, "w").write(jdata["Body"])
                   file_recd = True
                 # Send request for first (or next file)
@@ -269,7 +269,7 @@ def NodeVault(port, AppIP):
       jdata["State"] = "DATA"
       try:
         secret = open(fname).read()
-        print(secret)
+        print("File ", fname, " sent!")
         jdata["Body"] = secret
         jdata["Status"] = "Success"
       except FileNotFoundError:
