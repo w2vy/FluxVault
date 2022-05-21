@@ -349,5 +349,3 @@ if (sys.argv[1].upper() == "TEST"):
         print(node['name'], ipadr, node['hash'])
   print("Done")
 
-
-# {'ip': '65.108.132.81:16187', 'name': 'gammonbot', 'broadcastedAt': '2022-05-21T12:43:19.552Z', 'expireAt': '2022-05-21T13:48:19.552Z', 'hash': 'f06a811d54fc697de2c1a3f152398cdcfc592dadf91ec2f7eac1f9d38117d71c'}
