@@ -217,6 +217,86 @@ def NodeServer(port, vaultname, bootfile):
   else:
     print("BOOTFILE missing from comamnd line, see usage")
 
+def NodeVaultIP(port, AppIP):
+  # We have a node try sending it config data
+  try:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+  except socket.error:
+    print('Failed to create socket')
+    return
+
+  #print('# Getting remote IP address') 
+  try:
+      remote_ip = socket.gethostbyname( AppIP )
+  except socket.gaierror:
+      print('Hostname could not be resolved')
+      return
+
+  # Set short timeout
+  sock.settimeout(5)
+
+  # Connect to remote serverAESData
+  try:
+    print('# Connecting to server, ' + AppIP + ' (' + remote_ip + ')')
+    sock.connect((remote_ip , port))
+  except socket.timeout:
+    print("Connect timed out")
+    sock.close
+    return
+
+  sock.settimeout(None)
+
+  reply = send_receive(sock, "Hello")
+
+  try:
+    jdata = json.loads(reply)
+    PublicKey = jdata["PublicKey"].encode("utf-8")
+  except ValueError:
+    print("No Public Key received:", reply)
+    return
+  #print(PublicKey)
+  # Generate and send AES Key encrypted with PublicKey
+  AESKey = get_random_bytes(16).hex().encode("utf-8")
+  #print("AESKey TX ", type(AESKey), AESKey)
+  jdata = send_AESkey(PublicKey, AESKey)
+  jdata["State"] = AESKEY
+  data = json.dumps(jdata)
+  reply = send_receive(sock, data)
+  # AES Encryption should be started now
+  jdata = decrypt_aes_data(AESKey, reply)
+  #print("AESData ", jdata)
+  if (jdata["State"] != STARTAES):
+    print("StartAES not found")
+    return
+  if (jdata["Text"] != "Test"):
+    print("StartAES Failed")
+    return
+  jdata["Text"] = "Passed"
+  while (True):
+    data = encrypt_aes_data(AESKey, jdata)
+    reply = send_receive(sock, data)
+    jdata = decrypt_aes_data(AESKey, reply)
+    #print("Ready ", jdata)
+    reply = ""
+    if (jdata["State"] == DONE):
+      break
+    if (jdata["State"] == REQUEST):
+      fname = jdata["FILE"]
+      jdata["State"] = "DATA"
+      try:
+        secret = open(fname).read()
+        print("File ", fname, " sent!")
+        jdata["Body"] = secret
+        jdata["Status"] = "Success"
+      except FileNotFoundError:
+        jdata["Body"] = ""
+        jdata["Status"] = "FileNotFound"
+    else:
+      jdata["Body"] = ""
+      jdata["Status"] = "Unknown Command"
+    #print(jdata)
+  sock.close()
+
 def NodeVault(port, AppName):
   url = "https://api.runonflux.io/apps/location/" + AppName
   req = requests.get(url)
@@ -227,85 +307,11 @@ def NodeVault(port, AppName):
       for node in nodes:
         ipadr = node['ip'].split(':')[0]
         print(node['name'], ipadr, node['hash'])
-
-        # We have a node try sending it config data
-        try:
-          sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        except socket.error:
-          print('Failed to create socket')
-          sys.exit()
-
-        #print('# Getting remote IP address') 
-        try:
-            remote_ip = socket.gethostbyname( ipadr )
-        except socket.gaierror:
-            print('Hostname could not be resolved')
-            continue
-
-        # Set short timeout
-        sock.settimeout(5)
-
-        # Connect to remote serverAESData
-        try:
-          print('# Connecting to server, ' + ipadr + ' (' + remote_ip + ')')
-          sock.connect((remote_ip , port))
-        except socket.timeout:
-          print("Connect timed out")
-          sock.close
-          continue
-
-        sock.settimeout(None)
-
-        reply = send_receive(sock, "Hello")
-
-        try:
-          jdata = json.loads(reply)
-          PublicKey = jdata["PublicKey"].encode("utf-8")
-        except ValueError:
-          print("No Public Key received:", reply)
-          continue
-        #print(PublicKey)
-        # Generate and send AES Key encrypted with PublicKey
-        AESKey = get_random_bytes(16).hex().encode("utf-8")
-        #print("AESKey TX ", type(AESKey), AESKey)
-        jdata = send_AESkey(PublicKey, AESKey)
-        jdata["State"] = AESKEY
-        data = json.dumps(jdata)
-        reply = send_receive(sock, data)
-        # AES Encryption should be started now
-        jdata = decrypt_aes_data(AESKey, reply)
-        #print("AESData ", jdata)
-        if (jdata["State"] != STARTAES):
-          print("StartAES not found")
-          continue
-        if (jdata["Text"] != "Test"):
-          print("StartAES Failed")
-          continue
-        jdata["Text"] = "Passed"
-        while (True):
-          data = encrypt_aes_data(AESKey, jdata)
-          reply = send_receive(sock, data)
-          jdata = decrypt_aes_data(AESKey, reply)
-          #print("Ready ", jdata)
-          reply = ""
-          if (jdata["State"] == DONE):
-            break
-          if (jdata["State"] == REQUEST):
-            fname = jdata["FILE"]
-            jdata["State"] = "DATA"
-            try:
-              secret = open(fname).read()
-              print("File ", fname, " sent!")
-              jdata["Body"] = secret
-              jdata["Status"] = "Success"
-            except FileNotFoundError:
-              jdata["Body"] = ""
-              jdata["Status"] = "FileNotFound"
-          else:
-            jdata["Body"] = ""
-            jdata["Status"] = "Unknown Command"
-          #print(jdata)
-        sock.close()
+        NodeVaultIP(port, ipadr)
+    else:
+      print("Error", req.text)
+  else:
+    print("Error", url, "Status", req.status_code)
   return
 
 # NodeServer port VaultDomain
@@ -332,6 +338,9 @@ if (sys.argv[1].upper() == "NODE"):
 
 if (sys.argv[1].upper() == "VAULT"):
   NodeVault(port, sys.argv[3])
+
+if (sys.argv[1].upper() == "VAULTIP"):
+  NodeVaultIP(port, sys.argv[3])
 
 if (sys.argv[1].upper() == "TEST"):
   url = "https://api.runonflux.io/apps/location/" + sys.argv[3]
