@@ -10,6 +10,7 @@ import time
 import requests
 
 VaultName = ""
+RequestFiles = []
 
 def encrypt_data(keypem, data):
   key = RSA.import_key(keypem)
@@ -99,6 +100,14 @@ def send_receive(sock, request):
   #print(reply)
   return reply
 
+def receive_only(sock):
+  # Receive data
+  #print('# Receive data from server')
+  reply = sock.recv(8192)
+  reply = reply.decode("utf-8")
+  #print(reply)
+  return reply
+
 CONNECTED = "CONNECTED"
 KEYSENT = "KEYSENT"
 STARTAES = "STARTAES"
@@ -134,24 +143,23 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
           time.sleep(15)
           return
         nkData = { "State": CONNECTED }
+        # Copy file list into local variable
+        BootFiles = []
+        for fname in BOOTFILES:
+          try:
+            fh = open(fname)
+            fh.close()
+            # File exists
+          except FileNotFoundError:
+            BootFiles.append(fname)
         
-        try:
-          secret = open(BOOTFILE).read()
-          file_recd = True
-        except FileNotFoundError:
-          file_recd = False
         while True:
           try:
-              data = self.rfile.readline()
               reply = ""
-              if not data:
-                print("No Data!")
-                break
               if (nkData["State"] == CONNECTED):
                 # New incoming connection from Vault, maybe validate source IP here or in server listen
                 # Create a new RSA key and send the Public Key the Vault
                 # We appear to ignore any initial data
-                print("Connected: ", data)
                 nkData["RSAkey"] = RSA.generate(2048)
                 nkData["Private"] = nkData["RSAkey"].export_key()
                 nkData["Public"] = nkData["RSAkey"].publickey().export_key()
@@ -160,6 +168,9 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
                 jdata = { "State": KEYSENT, "PublicKey": nkData["Public"].decode("utf-8")}
                 reply = json.dumps(jdata)
               else:
+                data = self.rfile.readline()
+                if not data:
+                  break
                 if (nkData["State"] == KEYSENT):
                   jdata = json.loads(data)
                   if (jdata["State"] != AESKEY):
@@ -186,15 +197,15 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
                   jdata = decrypt_aes_data(nkData["AESKEY"], data)
                 if (jdata["State"] == "DATA"):
                   #print(jdata["Body"])
-                  open(BOOTFILE, "w").write(jdata["Body"])
-                  file_recd = True
+                  open(BootFiles[0], "w").write(jdata["Body"])
+                  BootFiles.pop(0)
                 # Send request for first (or next file)
                 # If no more we are Done (close connection?)
                 random = get_random_bytes(16).hex()
-                if (file_recd):
+                if (len(BootFiles) == 0):
                   jdata = { "State": DONE, "fill": random }
                 else:
-                  jdata = { "State": REQUEST, "FILE": BOOTFILE, "fill": random }
+                  jdata = { "State": REQUEST, "FILE": BootFiles[0], "fill": random }
                 reply = encrypt_aes_data(nkData["AESKEY"], jdata)
               #print("Reply: ", len(reply), " ", reply)
               if (len(reply) > 0):
@@ -205,17 +216,17 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
             break
         print(f'Closed: {client}')
 
-def NodeServer(port, vaultname, bootfile):
+def NodeServer(port, vaultname, bootfiles):
   global VaultName
   VaultName = vaultname
-  global BOOTFILE
-  BOOTFILE = bootfile
-  if (len(BOOTFILE) > 0):
+  global BOOTFILES
+  BOOTFILES = bootfiles
+  if (len(BOOTFILES) > 0):
     with ThreadedTCPServer(('', port), NodeKeyClient) as server:
         print(f'The NodeKeyClient server is running on port ' + str(port))
         server.serve_forever()
   else:
-    print("BOOTFILE missing from comamnd line, see usage")
+    print("BOOTFILES missing from comamnd line, see usage")
 
 def NodeVaultIP(port, AppIP):
   # We have a node try sending it config data
@@ -246,7 +257,7 @@ def NodeVaultIP(port, AppIP):
 
   sock.settimeout(None)
 
-  reply = send_receive(sock, "Hello")
+  reply = receive_only(sock)
 
   try:
     jdata = json.loads(reply)
@@ -324,17 +335,32 @@ if (len(sys.argv) > 3):
   except ValueError:
     print(sys.argv[2] + " invalid port number")
     usage = True
+else:
+  usage = True
 
 if (usage):
   print("Usage:")
-  print(sys.argv[0] + " NodeServer port VaultDomain")
-  print(sys.argv[0] + " NodeVault port AppName")
+  print(sys.argv[0] + " Node port VaultDomain file1 [file2 file3 ...]")
+  print("")
+  print("Run on node with the port and Domain/IP of the Vault and the list of files")
+  print("")
+  print(sys.argv[0] + " Vault port AppName")
+  print("")
+  print("Run on Vault the AppName will be used to get the list of nodes where the App is running")
+  print("The vault will connect to each node : Port and provide the files requested")
+  print("")
+  print(sys.argv[0] + " VaultIP port IP")
+  print("")
+  print("The Vault will connect to a single ip : Port to provide files")
+  print("")
   sys.exit()
 
-print(sys.argv[1].upper(), sys.argv[1])
+files = []
+if (len(sys.argv) > 4):
+  files = sys.argv[4:]
 
 if (sys.argv[1].upper() == "NODE"):
-  NodeServer(port, sys.argv[3], sys.argv[4])
+  NodeServer(port, sys.argv[3], files)
 
 if (sys.argv[1].upper() == "VAULT"):
   NodeVault(port, sys.argv[3])
