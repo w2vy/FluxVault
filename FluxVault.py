@@ -25,7 +25,7 @@ def encrypt_data(keypem, data):
     # Encrypt the data with the AES session key
     cipher_aes = AES.new(session_key, AES.MODE_EAX)
     ciphertext, tag = cipher_aes.encrypt_and_digest(data)
-    
+
     msg = {
         "enc_session_key":enc_session_key.hex(),
         "nonce": cipher_aes.nonce.hex(),
@@ -131,10 +131,10 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
         print(f'Connected: {client}')
         peer_ip = self.connection.getpeername()
         result = socket.gethostbyname(VaultName)
-        if (peer_ip[0] != result):
-          print("Reject Connection, wrong IP:", peer_ip[0], result)
-          time.sleep(15)
-          return
+        if peer_ip[0] != result:
+            print("Reject Connection, wrong IP:", peer_ip[0], result)
+            time.sleep(15)
+            return
         nkData = { "State": CONNECTED }
         # Copy file list into local variable
         BootFiles = BOOTFILES.copy()
@@ -143,65 +143,65 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
           try:
               reply = ""
               if (nkData["State"] == CONNECTED):
-                # New incoming connection from Vault, maybe validate source IP here or in server listen
-                # Create a new RSA key and send the Public Key the Vault
-                # We appear to ignore any initial data
-                nkData["RSAkey"] = RSA.generate(2048)
-                nkData["Private"] = nkData["RSAkey"].export_key()
-                nkData["Public"] = nkData["RSAkey"].publickey().export_key()
-                nkData["State"] = KEYSENT
-                jdata = { "State": KEYSENT, "PublicKey": nkData["Public"].decode("utf-8")}
-                reply = json.dumps(jdata)
+                  # New incoming connection from Vault, maybe validate source IP here or in server listen
+                  # Create a new RSA key and send the Public Key the Vault
+                  # We appear to ignore any initial data
+                  nkData["RSAkey"] = RSA.generate(2048)
+                  nkData["Private"] = nkData["RSAkey"].export_key()
+                  nkData["Public"] = nkData["RSAkey"].publickey().export_key()
+                  nkData["State"] = KEYSENT
+                  jdata = { "State": KEYSENT, "PublicKey": nkData["Public"].decode("utf-8")}
+                  reply = json.dumps(jdata)
               else:
-                data = self.rfile.readline()
-                if not data:
-                  break
-                if (nkData["State"] == KEYSENT):
-                  jdata = json.loads(data)
-                  if (jdata["State"] != AESKEY):
-                    break # Tollerate no errors
-                  nkData["AESKEY"] = decrypt_data(nkData["Private"], jdata)
-                  nkData["State"] = STARTAES
-                  random = get_random_bytes(16).hex()
-                  jdata = { "State": STARTAES, "Text": "Test", "fill": random}
-                  reply = encrypt_aes_data(nkData["AESKEY"], jdata)
-                else:
-                  if (nkData["State"] == STARTAES):
-                    jdata = decrypt_aes_data(nkData["AESKEY"], data)
-                    if (jdata["State"] == STARTAES and jdata["Text"] == "Passed"):
-                      nkData["State"] = READY # We are good to go!
-                      data = ""
-                    else:
-                      break # Failed
+                  data = self.rfile.readline()
+                  if not data:
+                      break
+                  if (nkData["State"] == KEYSENT):
+                      jdata = json.loads(data)
+                      if (jdata["State"] != AESKEY):
+                          break # Tollerate no errors
+                      nkData["AESKEY"] = decrypt_data(nkData["Private"], jdata)
+                      nkData["State"] = STARTAES
+                      random = get_random_bytes(16).hex()
+                      jdata = { "State": STARTAES, "Text": "Test", "fill": random}
+                      reply = encrypt_aes_data(nkData["AESKEY"], jdata)
+                  else:
+                      if (nkData["State"] == STARTAES):
+                        jdata = decrypt_aes_data(nkData["AESKEY"], data)
+                        if (jdata["State"] == STARTAES and jdata["Text"] == "Passed"):
+                            nkData["State"] = READY # We are good to go!
+                            data = ""
+                        else:
+                            break # Failed
               if (nkData["State"] == READY):
-                if (len(data) == 0):
-                  jdata = {"State": READY}
-                else:
-                  jdata = decrypt_aes_data(nkData["AESKEY"], data)
-                if (jdata["State"] == "DATA"):
-                  if (jdata["Status"] == "Success"):
-                    open(file_dir+BootFiles[0], "w").write(jdata["Body"])
-                  BootFiles.pop(0)
-                # Send request for first (or next file)
-                # If no more we are Done (close connection?)
-                random = get_random_bytes(16).hex()
-                if (len(BootFiles) == 0):
-                  jdata = { "State": DONE, "fill": random }
-                else:
-                  try:
-                    content = open(file_dir+BootFiles[0]).read()
-                    crc = binascii.crc32(content.encode("utf-8"))
-                    # File exists
-                  except FileNotFoundError:
-                    crc = 0
-                  jdata = { "State": REQUEST, "FILE": BootFiles[0], "crc32": crc, "fill": random }
-                reply = encrypt_aes_data(nkData["AESKEY"], jdata)
+                  if (len(data) == 0):
+                      jdata = {"State": READY}
+                  else:
+                      jdata = decrypt_aes_data(nkData["AESKEY"], data)
+                  if (jdata["State"] == "DATA"):
+                      if (jdata["Status"] == "Success"):
+                          open(file_dir+BootFiles[0], "w").write(jdata["Body"])
+                      BootFiles.pop(0)
+                  # Send request for first (or next file)
+                  # If no more we are Done (close connection?)
+                  random = get_random_bytes(16).hex()
+                  if (len(BootFiles) == 0):
+                    jdata = { "State": DONE, "fill": random }
+                  else:
+                      try:
+                          content = open(file_dir+BootFiles[0]).read()
+                          crc = binascii.crc32(content.encode("utf-8"))
+                          # File exists
+                      except FileNotFoundError:
+                          crc = 0
+                      jdata = { "State": REQUEST, "FILE": BootFiles[0], "crc32": crc, "fill": random }
+                      reply = encrypt_aes_data(nkData["AESKEY"], jdata)
               if (len(reply) > 0):
                 reply += "\n"
                 self.wfile.write(reply.encode("utf-8"))
           except ValueError:
-            print("try failed")
-            break
+              print("try failed")
+              break
         print(f'Closed: {client}')
 
 def NodeServer(port, vaultname, bootfiles, base):
