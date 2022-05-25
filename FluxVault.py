@@ -167,38 +167,40 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
                         reply = encrypt_aes_data(nkData["AESKEY"], jdata)
                     else:
                         if nkData["State"] == STARTAES:
-                          jdata = decrypt_aes_data(nkData["AESKEY"], data)
-                          if jdata["State"] == STARTAES and jdata["Text"] == "Passed":
-                              nkData["State"] = READY # We are good to go!
-                              data = ""
-                          else:
-                              break # Failed
-                if nkData["State"] == READY:
-                    if len(data) == 0:
-                        jdata = {"State": READY}
-                    else:
-                        jdata = decrypt_aes_data(nkData["AESKEY"], data)
-                    if jdata["State"] == "DATA":
-                        if jdata["Status"] == "Success":
-                            open(file_dir+BootFiles[0], "w").write(jdata["Body"])
-                        BootFiles.pop(0)
-                    # Send request for first (or next file)
-                    # If no more we are Done (close connection?)
-                    random = get_random_bytes(16).hex()
-                    if len(BootFiles) == 0:
-                        jdata = { "State": DONE, "fill": random }
-                    else:
-                        try:
-                            content = open(file_dir+BootFiles[0]).read()
-                            crc = binascii.crc32(content.encode("utf-8"))
-                            # File exists
-                        except FileNotFoundError:
-                            crc = 0
-                        jdata = { "State": REQUEST, "FILE": BootFiles[0], "crc32": crc, "fill": random }
-                        reply = encrypt_aes_data(nkData["AESKEY"], jdata)
-                if len(reply) > 0:
-                  reply += "\n"
-                  self.wfile.write(reply.encode("utf-8"))
+                            jdata = decrypt_aes_data(nkData["AESKEY"], data)
+                            if jdata["State"] == STARTAES and jdata["Text"] == "Passed":
+                                nkData["State"] = READY # We are good to go!
+                                data = ""
+                            else:
+                                break # Failed
+                    if nkData["State"] == READY:
+                        if len(data) == 0:
+                            jdata = {"State": READY}
+                        else:
+                            jdata = decrypt_aes_data(nkData["AESKEY"], data)
+                        if jdata["State"] == "DATA":
+                            if jdata["Status"] == "Success":
+                                open(file_dir+BootFiles[0], "w").write(jdata["Body"])
+                            BootFiles.pop(0)
+                        # Send request for first (or next file)
+                        # If no more we are Done (close connection?)
+                        random = get_random_bytes(16).hex()
+                        if len(BootFiles) == 0:
+                            jdata = { "State": DONE, "fill": random }
+                        else:
+                            try:
+                                content = open(file_dir+BootFiles[0]).read()
+                                crc = binascii.crc32(content.encode("utf-8"))
+                                # File exists
+                            except FileNotFoundError:
+                                crc = 0
+                            jdata = { "State": REQUEST,
+                                      "FILE": BootFiles[0], 
+                                      "crc32": crc, "fill": random }
+                            reply = encrypt_aes_data(nkData["AESKEY"], jdata)
+                    if len(reply) > 0:
+                      reply += "\n"
+                      self.wfile.write(reply.encode("utf-8"))
             except ValueError:
                 print("try failed")
                 break
@@ -269,7 +271,7 @@ def NodeVaultIP(port, AppIP, file_dir):
         print("StartAES Failed")
         return
     jdata["Text"] = "Passed"
-    while (True):
+    while True:
         data = encrypt_aes_data(AESKey, jdata)
         reply = send_receive(sock, data)
         jdata = decrypt_aes_data(AESKey, reply)
@@ -318,21 +320,20 @@ def NodeVault(port, AppName, file_dir):
     return
 
 def usage(argv):
-    if usage:
-        print("Usage:")
-        print(argv[0] + " Node --port port --vault VaultDomain [--dir dirname] file1 [file2 file3 ...]")
-        print("")
-        print("Run on node with the port and Domain/IP of the Vault and the list of files")
-        print("")
-        print(argv[0] + " Vault --port port --app AppName --dir dirname")
-        print("")
-        print("Run on Vault the AppName will be used to get the list of nodes where the App is running")
-        print("The vault will connect to each node : Port and provide the files requested")
-        print("")
-        print(argv[0] + " VaultIP --port port --ip IPadr [--dir dirname]")
-        print("")
-        print("The Vault will connect to a single ip : Port to provide files")
-        print("")
+    print("Usage:")
+    print(argv[0] + " Node --port port --vault VaultDomain [--dir dirname] file1 [file2 file3 ...]")
+    print("")
+    print("Run on node with the port and Domain/IP of the Vault and the list of files")
+    print("")
+    print(argv[0] + " Vault --port port --app AppName --dir dirname")
+    print("")
+    print("Run on Vault the AppName will be used to get the list of nodes where the App is running")
+    print("The vault will connect to each node : Port and provide the files requested")
+    print("")
+    print(argv[0] + " VaultIP --port port --ip IPadr [--dir dirname]")
+    print("")
+    print("The Vault will connect to a single ip : Port to provide files")
+    print("")
 
 # NodeServer port VaultDomain
 # NodeVault port NodeIP
@@ -350,31 +351,31 @@ error = False
 
 if sys.argv[1].upper() == "NODE":
     args = sys.argv[2:]
-    while (len(args) > 0):
-      if args[0] in node_opts:
-          if args[0].lower() == "--port":
-              try:
-                  port = int(args[1])
-                  args.pop(0)
-                  args.pop(0)
-              except ValueError:
-                  print(args[1] + " invalid port number")
-                  sys.exit()
-          if args[0].lower() == "--vault":
-              vault = args[1]
-              args.pop(0)
-              args.pop(0)
-          if args[0].lower() == "--dir":
-              base_dir = args[1]
-              if base_dir.endswith("/") == False:
-                  base_dir = base_dir + "/"
-              args.pop(0)
-              args.pop(0)
-              if os.path.isdir(base_dir) == False:
-                  print(base_dir + " is not a directory or does not exist")
-      else:
-          files = args
-          break
+    while len(args) > 0:
+        if args[0] in node_opts:
+            if args[0].lower() == "--port":
+                try:
+                    port = int(args[1])
+                    args.pop(0)
+                    args.pop(0)
+                except ValueError:
+                    print(args[1] + " invalid port number")
+                    sys.exit()
+            if args[0].lower() == "--vault":
+                vault = args[1]
+                args.pop(0)
+                args.pop(0)
+            if args[0].lower() == "--dir":
+                base_dir = args[1]
+                if base_dir.endswith("/") == False:
+                    base_dir = base_dir + "/"
+                args.pop(0)
+                args.pop(0)
+                if os.path.isdir(base_dir) == False:
+                    print(base_dir + " is not a directory or does not exist")
+        else:
+            files = args
+            break
     if port == -1:
         print("Port number must be specified like --port 31234")
         error = True
@@ -419,16 +420,18 @@ if sys.argv[1].upper() == "VAULT":
                 if os.path.isdir(base_dir) == False:
                     print(base_dir + " is not a directory or does not exist")
         else:
-          print("Unknown option: ", args[0])
-          args.pop(0)
+            print("Unknown option: ", args[0])
+            args.pop(0)
     if port == -1:
         print("Port number must be specified like --port 31234")
         error = True
     if len(appName) == 0 and len(ipadr) == 0:
-        print("Application Name OR IP must be set but not Both! like: --appname myapp or --ip 2.3.45.6")
+        print("Application Name OR IP must be set but not Both!",
+              " like: --appname myapp or --ip 2.3.45.6")
         error = True
     if len(appName) > 0 and len(ipadr) > 0:
-        print("Application Name OR IP must be set but not Both! like: --appname myapp or --ip 2.3.45.6")
+        print("Application Name OR IP must be set but not Both!",
+              " like: --appname myapp or --ip 2.3.45.6")
         error = True
     if error == True:
         usage(sys.argv)
