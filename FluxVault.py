@@ -50,17 +50,17 @@ def decrypt_data(keypem, cipher):
     data = cipher_aes.decrypt_and_verify(ciphertext, tag)
     return data
 
-  def send_AESkey(keypem, aeskey):
+def send_AESkey(keypem, aeskey):
     message = encrypt_data(keypem, aeskey)
     return message
 
-  def receive_AESkey(keypem, message):
+def receive_AESkey(keypem, message):
     cipher = json.loads(message)
     data = decrypt_data(keypem, cipher)
     data = data.decode("utf-8")
     return data
 
-  def decrypt_aes_data(key, data):
+def decrypt_aes_data(key, data):
     jdata = json.loads(data)
     nonce = bytes.fromhex(jdata["nonce"])
     tag = bytes.fromhex(jdata["tag"])
@@ -71,7 +71,7 @@ def decrypt_data(keypem, cipher):
     msg = cipher.decrypt_and_verify(ciphertext, tag)
     return json.loads(msg)
 
-  def encrypt_aes_data(key, message):
+def encrypt_aes_data(key, message):
     msg = json.dumps(message)
     cipher = AES.new(key, AES.MODE_EAX)
     ciphertext, tag = cipher.encrypt_and_digest(msg.encode("utf-8"))
@@ -97,7 +97,7 @@ def send_receive(sock, request):
     reply = reply.decode("utf-8")
     return reply
 
-  def receive_only(sock):
+def receive_only(sock):
     # Receive data
     reply = sock.recv(MaxMessage)
     reply = reply.decode("utf-8")
@@ -295,9 +295,9 @@ def NodeVaultIP(port, AppIP, file_dir):
                 print("File Not Found: " + file_dir+fname)
                 jdata["Body"] = ""
                 jdata["Status"] = "FileNotFound"
-          else:
-              jdata["Body"] = ""
-              jdata["Status"] = "Unknown Command"
+        else:
+            jdata["Body"] = ""
+            jdata["Status"] = "Unknown Command"
     sock.close()
 
 def NodeVault(port, AppName, file_dir):
