@@ -138,70 +138,70 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
         nkData = { "State": CONNECTED }
         # Copy file list into local variable
         BootFiles = BOOTFILES.copy()
-          
+
         while True:
-          try:
-              reply = ""
-              if (nkData["State"] == CONNECTED):
-                  # New incoming connection from Vault, maybe validate source IP here or in server listen
-                  # Create a new RSA key and send the Public Key the Vault
-                  # We appear to ignore any initial data
-                  nkData["RSAkey"] = RSA.generate(2048)
-                  nkData["Private"] = nkData["RSAkey"].export_key()
-                  nkData["Public"] = nkData["RSAkey"].publickey().export_key()
-                  nkData["State"] = KEYSENT
-                  jdata = { "State": KEYSENT, "PublicKey": nkData["Public"].decode("utf-8")}
-                  reply = json.dumps(jdata)
-              else:
-                  data = self.rfile.readline()
-                  if not data:
-                      break
-                  if (nkData["State"] == KEYSENT):
-                      jdata = json.loads(data)
-                      if (jdata["State"] != AESKEY):
-                          break # Tollerate no errors
-                      nkData["AESKEY"] = decrypt_data(nkData["Private"], jdata)
-                      nkData["State"] = STARTAES
-                      random = get_random_bytes(16).hex()
-                      jdata = { "State": STARTAES, "Text": "Test", "fill": random}
-                      reply = encrypt_aes_data(nkData["AESKEY"], jdata)
-                  else:
-                      if (nkData["State"] == STARTAES):
+            try:
+                reply = ""
+                if nkData["State"] == CONNECTED:
+                    # New incoming connection from Vault
+                    # Create a new RSA key and send the Public Key the Vault
+                    # We appear to ignore any initial data
+                    nkData["RSAkey"] = RSA.generate(2048)
+                    nkData["Private"] = nkData["RSAkey"].export_key()
+                    nkData["Public"] = nkData["RSAkey"].publickey().export_key()
+                    nkData["State"] = KEYSENT
+                    jdata = { "State": KEYSENT, "PublicKey": nkData["Public"].decode("utf-8")}
+                    reply = json.dumps(jdata)
+                else:
+                    data = self.rfile.readline()
+                    if not data:
+                        break
+                    if nkData["State"] == KEYSENT:
+                        jdata = json.loads(data)
+                        if jdata["State"] != AESKEY:
+                            break # Tollerate no errors
+                        nkData["AESKEY"] = decrypt_data(nkData["Private"], jdata)
+                        nkData["State"] = STARTAES
+                        random = get_random_bytes(16).hex()
+                        jdata = { "State": STARTAES, "Text": "Test", "fill": random}
+                        reply = encrypt_aes_data(nkData["AESKEY"], jdata)
+                    else:
+                        if nkData["State"] == STARTAES:
+                          jdata = decrypt_aes_data(nkData["AESKEY"], data)
+                          if jdata["State"] == STARTAES and jdata["Text"] == "Passed":
+                              nkData["State"] = READY # We are good to go!
+                              data = ""
+                          else:
+                              break # Failed
+                if nkData["State"] == READY:
+                    if len(data) == 0:
+                        jdata = {"State": READY}
+                    else:
                         jdata = decrypt_aes_data(nkData["AESKEY"], data)
-                        if (jdata["State"] == STARTAES and jdata["Text"] == "Passed"):
-                            nkData["State"] = READY # We are good to go!
-                            data = ""
-                        else:
-                            break # Failed
-              if (nkData["State"] == READY):
-                  if (len(data) == 0):
-                      jdata = {"State": READY}
-                  else:
-                      jdata = decrypt_aes_data(nkData["AESKEY"], data)
-                  if (jdata["State"] == "DATA"):
-                      if (jdata["Status"] == "Success"):
-                          open(file_dir+BootFiles[0], "w").write(jdata["Body"])
-                      BootFiles.pop(0)
-                  # Send request for first (or next file)
-                  # If no more we are Done (close connection?)
-                  random = get_random_bytes(16).hex()
-                  if (len(BootFiles) == 0):
-                    jdata = { "State": DONE, "fill": random }
-                  else:
-                      try:
-                          content = open(file_dir+BootFiles[0]).read()
-                          crc = binascii.crc32(content.encode("utf-8"))
-                          # File exists
-                      except FileNotFoundError:
-                          crc = 0
-                      jdata = { "State": REQUEST, "FILE": BootFiles[0], "crc32": crc, "fill": random }
-                      reply = encrypt_aes_data(nkData["AESKEY"], jdata)
-              if (len(reply) > 0):
-                reply += "\n"
-                self.wfile.write(reply.encode("utf-8"))
-          except ValueError:
-              print("try failed")
-              break
+                    if jdata["State"] == "DATA":
+                        if jdata["Status"] == "Success":
+                            open(file_dir+BootFiles[0], "w").write(jdata["Body"])
+                        BootFiles.pop(0)
+                    # Send request for first (or next file)
+                    # If no more we are Done (close connection?)
+                    random = get_random_bytes(16).hex()
+                    if len(BootFiles) == 0:
+                        jdata = { "State": DONE, "fill": random }
+                    else:
+                        try:
+                            content = open(file_dir+BootFiles[0]).read()
+                            crc = binascii.crc32(content.encode("utf-8"))
+                            # File exists
+                        except FileNotFoundError:
+                            crc = 0
+                        jdata = { "State": REQUEST, "FILE": BootFiles[0], "crc32": crc, "fill": random }
+                        reply = encrypt_aes_data(nkData["AESKEY"], jdata)
+                if len(reply) > 0:
+                  reply += "\n"
+                  self.wfile.write(reply.encode("utf-8"))
+            except ValueError:
+                print("try failed")
+                break
         print(f'Closed: {client}')
 
 def NodeServer(port, vaultname, bootfiles, base):
@@ -211,7 +211,7 @@ def NodeServer(port, vaultname, bootfiles, base):
     BOOTFILES = bootfiles
     global file_dir
     file_dir = base
-    if (len(BOOTFILES) > 0):
+    if len(BOOTFILES) > 0:
         with ThreadedTCPServer(('', port), NodeKeyClient) as server:
             print(f'The NodeKeyClient server is running on port ' + str(port))
             server.serve_forever()
@@ -262,10 +262,10 @@ def NodeVaultIP(port, AppIP, file_dir):
     reply = send_receive(sock, data)
     # AES Encryption should be started now
     jdata = decrypt_aes_data(AESKey, reply)
-    if (jdata["State"] != STARTAES):
+    if jdata["State"] != STARTAES:
         print("StartAES not found")
         return
-    if (jdata["Text"] != "Test"):
+    if jdata["Text"] != "Test":
         print("StartAES Failed")
         return
     jdata["Text"] = "Passed"
@@ -274,16 +274,16 @@ def NodeVaultIP(port, AppIP, file_dir):
         reply = send_receive(sock, data)
         jdata = decrypt_aes_data(AESKey, reply)
         reply = ""
-        if (jdata["State"] == DONE):
+        if jdata["State"] == DONE:
             break
-        if (jdata["State"] == REQUEST):
+        if jdata["State"] == REQUEST:
             fname = jdata["FILE"]
             crc = int(jdata["crc32"])
             jdata["State"] = "DATA"
             try:
                 secret = open(file_dir+fname).read()
                 mycrc = binascii.crc32(secret.encode("utf-8"))
-                if (crc == mycrc):
+                if crc == mycrc:
                     print("File ", fname, " Match!")
                     jdata["Status"] = "Match"
                     jdata["Body"] = ""
@@ -303,9 +303,9 @@ def NodeVaultIP(port, AppIP, file_dir):
 def NodeVault(port, AppName, file_dir):
     url = "https://api.runonflux.io/apps/location/" + AppName
     req = requests.get(url)
-    if (req.status_code == 200):
+    if req.status_code == 200:
         values = json.loads(req.text)
-        if (values["status"] == "success"):
+        if values["status"] == "success":
             nodes = values["data"]
             for node in nodes:
                 ipadr = node['ip'].split(':')[0]
@@ -318,7 +318,7 @@ def NodeVault(port, AppName, file_dir):
     return
 
 def usage(argv):
-    if (usage):
+    if usage:
         print("Usage:")
         print(argv[0] + " Node --port port --vault VaultDomain [--dir dirname] file1 [file2 file3 ...]")
         print("")
@@ -348,11 +348,11 @@ ipadr = ""
 appName = ""
 error = False
 
-if (sys.argv[1].upper() == "NODE"):
+if sys.argv[1].upper() == "NODE":
     args = sys.argv[2:]
     while (len(args) > 0):
-      if (args[0] in node_opts):
-          if (args[0].lower() == "--port"):
+      if args[0] in node_opts:
+          if args[0].lower() == "--port":
               try:
                   port = int(args[1])
                   args.pop(0)
@@ -360,41 +360,41 @@ if (sys.argv[1].upper() == "NODE"):
               except ValueError:
                   print(args[1] + " invalid port number")
                   sys.exit()
-          if (args[0].lower() == "--vault"):
+          if args[0].lower() == "--vault":
               vault = args[1]
               args.pop(0)
               args.pop(0)
-          if (args[0].lower() == "--dir"):
+          if args[0].lower() == "--dir":
               base_dir = args[1]
-              if (base_dir.endswith("/") == False):
+              if base_dir.endswith("/") == False:
                   base_dir = base_dir + "/"
               args.pop(0)
               args.pop(0)
-              if (os.path.isdir(base_dir) == False):
+              if os.path.isdir(base_dir) == False:
                   print(base_dir + " is not a directory or does not exist")
       else:
           files = args
           break
-    if (port == -1):
+    if port == -1:
         print("Port number must be specified like --port 31234")
         error = True
-    if (len(vault) == 0):
+    if len(vault) == 0:
         print("Vault Domain or IP must be set like: --vault 1.2.3.4 or --vault my.vault.host.io")
         error = True
-    if (len(files) == 0):
+    if len(files) == 0:
         print("Secret files must be listed after all other arguments")
         error = True
-    if (error == True):
+    if error == True:
         usage(sys.argv)
     else:
         NodeServer(port, vault, files, base_dir)
     sys.exit()
 
-if (sys.argv[1].upper() == "VAULT"):
+if sys.argv[1].upper() == "VAULT":
     args = sys.argv[2:]
-    while (len(args) > 0):
-        if (args[0] in node_opts):
-            if (args[0].lower() == "--port"):
+    while len(args) > 0:
+        if args[0] in node_opts:
+            if args[0].lower() == "--port":
                 try:
                     port = int(args[1])
                     args.pop(0)
@@ -402,38 +402,38 @@ if (sys.argv[1].upper() == "VAULT"):
                 except ValueError:
                     print(args[1] + " invalid port number")
                     sys.exit()
-            if (args[0].lower() == "--app"):
+            if args[0].lower() == "--app":
                 appName = args[1]
                 args.pop(0)
                 args.pop(0)
-            if (args[0].lower() == "--ip"):
+            if args[0].lower() == "--ip":
                 ipadr = args[1]
                 args.pop(0)
                 args.pop(0)
-            if (args[0].lower() == "--dir"):
+            if args[0].lower() == "--dir":
                 base_dir = args[1]
-                if (base_dir.endswith("/") == False):
+                if base_dir.endswith("/") == False:
                     base_dir = base_dir + "/"
                 args.pop(0)
                 args.pop(0)
-                if (os.path.isdir(base_dir) == False):
+                if os.path.isdir(base_dir) == False:
                     print(base_dir + " is not a directory or does not exist")
         else:
           print("Unknown option: ", args[0])
           args.pop(0)
-    if (port == -1):
+    if port == -1:
         print("Port number must be specified like --port 31234")
         error = True
-    if (len(appName) == 0 and len(ipadr) == 0):
+    if len(appName) == 0 and len(ipadr) == 0:
         print("Application Name OR IP must be set but not Both! like: --appname myapp or --ip 2.3.45.6")
         error = True
-    if (len(appName) > 0 and len(ipadr) > 0):
+    if len(appName) > 0 and len(ipadr) > 0:
         print("Application Name OR IP must be set but not Both! like: --appname myapp or --ip 2.3.45.6")
         error = True
-    if (error == True):
+    if error == True:
         usage(sys.argv)
     else:
-        if (len(appName) > 0):
+        if len(appName) > 0:
             NodeVault(port, appName, base_dir)
         else:
             NodeVaultIP(port, ipadr, base_dir)
