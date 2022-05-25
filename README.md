@@ -62,14 +62,15 @@ The code was written to Python 3
 
 It uses the following python libraries
 
-from Crypto.PublicKey import RSA
-from Crypto.Random import get_random_bytes
-from Crypto.Cipher import AES, PKCS1_OAEP
-import json
-import sys
-import os
-import time
-import requests
+- from Crypto.PublicKey import RSA
+- from Crypto.Random import get_random_bytes
+- from Crypto.Cipher import AES, PKCS1_OAEP
+- import binascii
+- import json
+- import sys
+- import os
+- import time
+- import requests
 
 Crypto is obtained from the pycryptodome library, installed with 
 
