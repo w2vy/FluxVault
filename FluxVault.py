@@ -334,7 +334,6 @@ def usage(argv):
     print("The Vault will connect to a single ip : Port to provide files")
     print("")
 
-
 # NodeServer port VaultDomain
 # NodeVault port NodeIP
 
