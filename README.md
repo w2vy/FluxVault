@@ -26,7 +26,7 @@ The communication flow is as follows:
 5. If the Vault suceesfully decrypts the message it sends a Test Passed message, also encrypted.
    (All further messages are encrypted with this AES Key)
 6. The Node will send Request a message for a named file
-7. The Vault will return the contents of that file or an error status
+7. The Vault will return the contents of that file if it is missing or has changed or an error status
 
 Steps 6-7 repeat until the Node needs nothing else and sends a DONE message.
 
@@ -81,5 +81,4 @@ The rest are standard python libraries
 # TODO
 
 - Write code to periodically poll FluxOs for a list of nodes and see if aany need config
-- Add checksum of file, if it exists, so vault can send updated files
 - Explore a Windows GUI solution, right now it is command line only (Only tested on Ubuntu)
