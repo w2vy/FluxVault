@@ -50,11 +50,32 @@ This will come up as a server and always be availble to the Vault. If a connecti
 
 In the Vault enter the command:
 
-./FluxVault.py Vault --port 39898 --ip 127.0.0.1 --dir file
+./FluxVault.py Vault --port 39898 --ip 127.0.0.1 --dir files
 
 Where 39898 is the TCP port used and 127.0.0.1 is the IP address of the Flux Node where the App is running and the files will be read from ./files
 
 This will connect, negociate and finally request the file quotes.txt which will be printed to the terminal and the connection will close.
+
+# Dependencies
+
+The code was written to Python 3
+
+It uses the following python libraries
+
+from Crypto.PublicKey import RSA
+from Crypto.Random import get_random_bytes
+from Crypto.Cipher import AES, PKCS1_OAEP
+import json
+import sys
+import os
+import time
+import requests
+
+Crypto is obtained from the pycryptodome library, installed with 
+
+pip pycryptodome
+
+The rest are standard python libraries
 
 # TODO
 
