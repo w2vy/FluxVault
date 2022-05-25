@@ -8,14 +8,14 @@ There are two modes for the script NODE and VAULT
 The NODE is run in an Application running on a Flux Node
 The VAULT runs on a single secure system, typically behind a firewall.
 
-In my case the Vault is in my Home LAN and the Nodes are running on FLux
+In my case the Vault is in my Home LAN and the Nodes are running on Flux
 
 The Node will only accept connections from a predefined host name, which could be controlled by dyn-dns
 
 The Vault will query FluxOS to determine what IP addresses are running the application the Vault supports.
 The Vault will connect to the nodes periodically to see if they need any files sent securely.
 
-This is not designed to send large files, just simple configuration withs and passwords
+This is not designed to send large files, just simple configuration files and passwords
 
 The communication flow is as follows:
 
@@ -30,7 +30,7 @@ The communication flow is as follows:
 
 Steps 6-7 repeat until the Node needs nothing else and sends a DONE message.
 
-At the socket level the messages are JSON strings terminated with Newline. Presently the maximum length of the JSON message is 4096, this could be increased but the data is limited to a single JSON structure.
+At the socket level the messages are JSON strings terminated with Newline. Presently the maximum length of the JSON message is 8192, this could be increased but the data is limited to a single JSON structure.
 
 It is a simple proof of concept that can clearly be improved as well as implemented in other langauges as needed.
 
@@ -42,26 +42,22 @@ In the Proof of Concept form you can open two terminal windows, one as the Node 
 
 In the Node enter the command:
 
-./FluxVault.py Node 39898 localhost quotes.txt
+./FluxVault.py Node --port 39898 --vault localhost --dir temp/ quotes.txt readme.txt
 
-Where 39898 is TCP port that will be used and localhost is the Domain name (or IP) that the Vault resides
+Where 39898 is TCP port that will be used and localhost is the Domain name (or IP) that the Vault resides and the files will be stored in ./temp/
 
 This will come up as a server and always be availble to the Vault. If a connection comes in from a different address the connection will be rejected.
 
 In the Vault enter the command:
 
-./FluxVault.py Vault 39898 127.0.0.1
+./FluxVault.py Vault --port 39898 --ip 127.0.0.1 --dir file
 
-Where 39898 is the TCP port used and 127.0.0.1 is the IP address of the Flux Node where the App is running.
+Where 39898 is the TCP port used and 127.0.0.1 is the IP address of the Flux Node where the App is running and the files will be read from ./files
 
 This will connect, negociate and finally request the file quotes.txt which will be printed to the terminal and the connection will close.
 
 # TODO
 
 - Write code to periodically poll FluxOs for a list of nodes and see if aany need config
-- Add command line arguements to specify target (Node) and source (Vault) data directories
-- Add configuration to which files the Node needs
-- Add configuration to which apps tehVault supports
-- Clean up code and insure raised execptions will be caught
-- Add suitable log files to dignose run-time issues once deployed
+- Add checksum of file, if it exists, so vault can send updated files
 - Explore a Windows GUI solution, right now it is command line only (Only tested on Ubuntu)

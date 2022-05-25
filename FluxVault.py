@@ -12,6 +12,8 @@ import os
 import time
 import requests
 
+MaxMessage = 8192
+
 VaultName = ""
 RequestFiles = []
 
@@ -51,7 +53,6 @@ def decrypt_data(keypem, cipher):
   return data
 
 def send_AESkey(keypem, aeskey):
-  #print("encoded ", aeskey)
   message = encrypt_data(keypem, aeskey)
   return message
 
@@ -59,7 +60,6 @@ def receive_AESkey(keypem, message):
   cipher = json.loads(message)
   data = decrypt_data(keypem, cipher)
   data = data.decode("utf-8")
-  #print("Received ", data)
   return data
 
 def decrypt_aes_data(key, data):
@@ -86,8 +86,6 @@ def encrypt_aes_data(key, message):
   return data
 
 def send_receive(sock, request):
-    # Send data to remote server
-  #print('# Sending data to server')
   request += "\n"
 
   try:
@@ -97,18 +95,14 @@ def send_receive(sock, request):
       sys.exit()
 
   # Receive data
-  #print('# Receive data from server')
-  reply = sock.recv(8192)
+  reply = sock.recv(MaxMessage)
   reply = reply.decode("utf-8")
-  #print(reply)
   return reply
 
 def receive_only(sock):
   # Receive data
-  #print('# Receive data from server')
-  reply = sock.recv(8192)
+  reply = sock.recv(MaxMessage)
   reply = reply.decode("utf-8")
-  #print(reply)
   return reply
 
 CONNECTED = "CONNECTED"
@@ -138,9 +132,7 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
         client = f'{self.client_address} on {threading.currentThread().getName()}'
         print(f'Connected: {client}')
         peer_ip = self.connection.getpeername()
-        #print("PeerIP ", peer_ip[1])
         result = socket.gethostbyname(VaultName)
-        #print("Vault Host", VaultName, result)
         if (peer_ip[0] != result):
           print("Reject Connection, wrong IP:", peer_ip[0], result)
           time.sleep(15)
@@ -167,7 +159,6 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
                 nkData["Private"] = nkData["RSAkey"].export_key()
                 nkData["Public"] = nkData["RSAkey"].publickey().export_key()
                 nkData["State"] = KEYSENT
-                #print("Public: ", type(nkData["Public"]), nkData["Public"])
                 jdata = { "State": KEYSENT, "PublicKey": nkData["Public"].decode("utf-8")}
                 reply = json.dumps(jdata)
               else:
@@ -179,14 +170,12 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
                   if (jdata["State"] != AESKEY):
                     break # Tollerate no errors
                   nkData["AESKEY"] = decrypt_data(nkData["Private"], jdata)
-                  #print("AESKey RX ", type(nkData["AESKEY"]), nkData["AESKEY"])
                   nkData["State"] = STARTAES
                   random = get_random_bytes(16).hex()
                   jdata = { "State": STARTAES, "Text": "Test", "fill": random}
                   reply = encrypt_aes_data(nkData["AESKEY"], jdata)
                 else:
                   if (nkData["State"] == STARTAES):
-                    #print("Pass?", data)
                     jdata = decrypt_aes_data(nkData["AESKEY"], data)
                     if (jdata["State"] == STARTAES and jdata["Text"] == "Passed"):
                       nkData["State"] = READY # We are good to go!
@@ -199,7 +188,6 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
                 else:
                   jdata = decrypt_aes_data(nkData["AESKEY"], data)
                 if (jdata["State"] == "DATA"):
-                  #print(jdata["Body"])
                   open(file_dir+BootFiles[0], "w").write(jdata["Body"])
                   BootFiles.pop(0)
                 # Send request for first (or next file)
@@ -210,7 +198,6 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
                 else:
                   jdata = { "State": REQUEST, "FILE": BootFiles[0], "fill": random }
                 reply = encrypt_aes_data(nkData["AESKEY"], jdata)
-              #print("Reply: ", len(reply), " ", reply)
               if (len(reply) > 0):
                 reply += "\n"
                 self.wfile.write(reply.encode("utf-8"))
@@ -241,7 +228,6 @@ def NodeVaultIP(port, AppIP, file_dir):
     print('Failed to create socket')
     return
 
-  #print('# Getting remote IP address') 
   try:
       remote_ip = socket.gethostbyname( AppIP )
   except socket.gaierror:
@@ -270,17 +256,14 @@ def NodeVaultIP(port, AppIP, file_dir):
   except ValueError:
     print("No Public Key received:", reply)
     return
-  #print(PublicKey)
   # Generate and send AES Key encrypted with PublicKey
   AESKey = get_random_bytes(16).hex().encode("utf-8")
-  #print("AESKey TX ", type(AESKey), AESKey)
   jdata = send_AESkey(PublicKey, AESKey)
   jdata["State"] = AESKEY
   data = json.dumps(jdata)
   reply = send_receive(sock, data)
   # AES Encryption should be started now
   jdata = decrypt_aes_data(AESKey, reply)
-  #print("AESData ", jdata)
   if (jdata["State"] != STARTAES):
     print("StartAES not found")
     return
@@ -292,7 +275,6 @@ def NodeVaultIP(port, AppIP, file_dir):
     data = encrypt_aes_data(AESKey, jdata)
     reply = send_receive(sock, data)
     jdata = decrypt_aes_data(AESKey, reply)
-    #print("Ready ", jdata)
     reply = ""
     if (jdata["State"] == DONE):
       break
@@ -311,7 +293,6 @@ def NodeVaultIP(port, AppIP, file_dir):
     else:
       jdata["Body"] = ""
       jdata["Status"] = "Unknown Command"
-    #print(jdata)
   sock.close()
 
 def NodeVault(port, AppName, file_dir):
@@ -452,20 +433,3 @@ if (sys.argv[1].upper() == "VAULT"):
     else:
       NodeVaultIP(port, ipadr, base_dir)
   sys.exit()
-
-if (sys.argv[1].upper() == "TEST"):
-  url = "https://api.runonflux.io/apps/location/" + sys.argv[3]
-  print("\r\nRequests\r\n")
-  req = requests.get(url)
-  print("Status ", req.status_code, type(req.status_code))
-  if (req.status_code == 200):
-    print("Matched")
-    values = json.loads(req.text)
-    print(values)
-    if (values["status"] == "success"):
-      nodes = values["data"]
-      for node in nodes:
-        ipadr = node['ip'].split(':')[0]
-        print(node['name'], ipadr, node['hash'])
-  print("Done")
-
