@@ -10,9 +10,9 @@ import os
 import time
 import requests
 
-MaxMessage = 8192
+MAX_MESSAGE = 8192
 
-VaultName = ""
+  vault_name = ""
 RequestFiles = []
 
 def encrypt_data(keypem, data):
@@ -50,7 +50,7 @@ def decrypt_data(keypem, cipher):
     data = cipher_aes.decrypt_and_verify(ciphertext, tag)
     return data
 
-def send_AESkey(keypem, aeskey):
+def send_aesKey(keypem, aeskey):
     message = encrypt_data(keypem, aeskey)
     return message
 
@@ -93,13 +93,13 @@ def send_receive(sock, request):
         sys.exit()
 
     # Receive data
-    reply = sock.recv(MaxMessage)
+    reply = sock.recv(MAX_MESSAGE)
     reply = reply.decode("utf-8")
     return reply
 
 def receive_only(sock):
     # Receive data
-    reply = sock.recv(MaxMessage)
+    reply = sock.recv(MAX_MESSAGE)
     reply = reply.decode("utf-8")
     return reply
 
@@ -130,7 +130,7 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
         client = f'{self.client_address} on {threading.currentThread().getName()}'
         print(f'Connected: {client}')
         peer_ip = self.connection.getpeername()
-        result = socket.gethostbyname(VaultName)
+        result = socket.gethostbyname(  vault_name)
         if peer_ip[0] != result:
             print("Reject Connection, wrong IP:", peer_ip[0], result)
             time.sleep(15)
@@ -195,20 +195,20 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
                             except FileNotFoundError:
                                 crc = 0
                             jdata = { "State": REQUEST,
-                                      "FILE": BootFiles[0], 
+                                      "FILE": BootFiles[0],
                                       "crc32": crc, "fill": random }
                             reply = encrypt_aes_data(nkData["AESKEY"], jdata)
                     if len(reply) > 0:
-                      reply += "\n"
-                      self.wfile.write(reply.encode("utf-8"))
+                        reply += "\n"
+                        self.wfile.write(reply.encode("utf-8"))
             except ValueError:
                 print("try failed")
                 break
         print(f'Closed: {client}')
 
 def NodeServer(port, vaultname, bootfiles, base):
-    global VaultName
-    VaultName = vaultname
+    global   vault_name
+    vault_name = vaultname
     global BOOTFILES
     BOOTFILES = bootfiles
     global file_dir
@@ -258,7 +258,7 @@ def NodeVaultIP(port, AppIP, file_dir):
         return
     # Generate and send AES Key encrypted with PublicKey
     AESKey = get_random_bytes(16).hex().encode("utf-8")
-    jdata = send_AESkey(PublicKey, AESKey)
+    jdata = send_aesKey(PublicKey, AESKey)
     jdata["State"] = AESKEY
     data = json.dumps(jdata)
     reply = send_receive(sock, data)
