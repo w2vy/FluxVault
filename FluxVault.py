@@ -1,11 +1,14 @@
 #!/usr/bin/python
 
+from asyncore import file_dispatcher
+from operator import truediv
 from Crypto.PublicKey import RSA
 from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES, PKCS1_OAEP
 import json
 import binascii
 import sys
+import os
 import time
 import requests
 
@@ -147,7 +150,7 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
         BootFiles = []
         for fname in BOOTFILES:
           try:
-            fh = open(fname)
+            fh = open(file_dir+fname)
             fh.close()
             # File exists
           except FileNotFoundError:
@@ -197,7 +200,7 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
                   jdata = decrypt_aes_data(nkData["AESKEY"], data)
                 if (jdata["State"] == "DATA"):
                   #print(jdata["Body"])
-                  open(BootFiles[0], "w").write(jdata["Body"])
+                  open(file_dir+BootFiles[0], "w").write(jdata["Body"])
                   BootFiles.pop(0)
                 # Send request for first (or next file)
                 # If no more we are Done (close connection?)
@@ -216,11 +219,13 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
             break
         print(f'Closed: {client}')
 
-def NodeServer(port, vaultname, bootfiles):
+def NodeServer(port, vaultname, bootfiles, base):
   global VaultName
   VaultName = vaultname
   global BOOTFILES
   BOOTFILES = bootfiles
+  global file_dir
+  file_dir = base
   if (len(BOOTFILES) > 0):
     with ThreadedTCPServer(('', port), NodeKeyClient) as server:
         print(f'The NodeKeyClient server is running on port ' + str(port))
@@ -228,7 +233,7 @@ def NodeServer(port, vaultname, bootfiles):
   else:
     print("BOOTFILES missing from comamnd line, see usage")
 
-def NodeVaultIP(port, AppIP):
+def NodeVaultIP(port, AppIP, file_dir):
   # We have a node try sending it config data
   try:
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -295,11 +300,12 @@ def NodeVaultIP(port, AppIP):
       fname = jdata["FILE"]
       jdata["State"] = "DATA"
       try:
-        secret = open(fname).read()
+        secret = open(file_dir+fname).read()
         print("File ", fname, " sent!")
         jdata["Body"] = secret
         jdata["Status"] = "Success"
       except FileNotFoundError:
+        print("File Not Found: " + file_dir+fname)
         jdata["Body"] = ""
         jdata["Status"] = "FileNotFound"
     else:
@@ -308,7 +314,7 @@ def NodeVaultIP(port, AppIP):
     #print(jdata)
   sock.close()
 
-def NodeVault(port, AppName):
+def NodeVault(port, AppName, file_dir):
   url = "https://api.runonflux.io/apps/location/" + AppName
   req = requests.get(url)
   if (req.status_code == 200):
@@ -317,56 +323,135 @@ def NodeVault(port, AppName):
       nodes = values["data"]
       for node in nodes:
         ipadr = node['ip'].split(':')[0]
-        print(node['name'], ipadr, node['hash'])
-        NodeVaultIP(port, ipadr)
+        print(node['name'], ipadr)
+        NodeVaultIP(port, ipadr, file_dir)
     else:
       print("Error", req.text)
   else:
     print("Error", url, "Status", req.status_code)
   return
 
+def usage(argv):
+  if (usage):
+    print("Usage:")
+    print(argv[0] + " Node --port port --vault VaultDomain [--dir dirname] file1 [file2 file3 ...]")
+    print("")
+    print("Run on node with the port and Domain/IP of the Vault and the list of files")
+    print("")
+    print(argv[0] + " Vault --port port --app AppName --dir dirname")
+    print("")
+    print("Run on Vault the AppName will be used to get the list of nodes where the App is running")
+    print("The vault will connect to each node : Port and provide the files requested")
+    print("")
+    print(argv[0] + " VaultIP --port port --ip IPadr [--dir dirname]")
+    print("")
+    print("The Vault will connect to a single ip : Port to provide files")
+    print("")
+
+
 # NodeServer port VaultDomain
 # NodeVault port NodeIP
-usage = False
 
-if (len(sys.argv) > 3):
-  try:
-    port = int(sys.argv[2])
-  except ValueError:
-    print(sys.argv[2] + " invalid port number")
-    usage = True
-else:
-  usage = True
-
-if (usage):
-  print("Usage:")
-  print(sys.argv[0] + " Node port VaultDomain file1 [file2 file3 ...]")
-  print("")
-  print("Run on node with the port and Domain/IP of the Vault and the list of files")
-  print("")
-  print(sys.argv[0] + " Vault port AppName")
-  print("")
-  print("Run on Vault the AppName will be used to get the list of nodes where the App is running")
-  print("The vault will connect to each node : Port and provide the files requested")
-  print("")
-  print(sys.argv[0] + " VaultIP port IP")
-  print("")
-  print("The Vault will connect to a single ip : Port to provide files")
-  print("")
-  sys.exit()
+node_opts = ["--port", "--vault", "--dir"]
+vault_opts = ["--port", "--app", "--ip", "--dir"]
 
 files = []
-if (len(sys.argv) > 4):
-  files = sys.argv[4:]
+port = -1
+vault = ""
+base_dir = ""
+ipadr = ""
+appName = ""
+error = False
 
 if (sys.argv[1].upper() == "NODE"):
-  NodeServer(port, sys.argv[3], files)
+  args = sys.argv[2:]
+  while (len(args) > 0):
+    if (args[0] in node_opts):
+      if (args[0].lower() == "--port"):
+        try:
+          port = int(args[1])
+          args.pop(0)
+          args.pop(0)
+        except ValueError:
+          print(args[1] + " invalid port number")
+          sys.exit()
+      if (args[0].lower() == "--vault"):
+        vault = args[1]
+        args.pop(0)
+        args.pop(0)
+      if (args[0].lower() == "--dir"):
+        base_dir = args[1]
+        if (base_dir.endswith("/") == False):
+          base_dir = base_dir + "/"
+        args.pop(0)
+        args.pop(0)
+        if (os.path.isdir(base_dir) == False):
+          print(base_dir + " is not a directory or does not exist")
+    else:
+      files = args
+      break
+  if (port == -1):
+    print("Port number must be specified like --port 31234")
+    error = True
+  if (len(vault) == 0):
+    print("Vault Domain or IP must be set like: --vault 1.2.3.4 or --vault my.vault.host.io")
+    error = True
+  if (len(files) == 0):
+    print("Secret files must be listed after all other arguments")
+    error = True
+  if (error == True):
+    usage(sys.argv)
+  else:
+    NodeServer(port, vault, files, base_dir)
+  sys.exit()
 
 if (sys.argv[1].upper() == "VAULT"):
-  NodeVault(port, sys.argv[3])
-
-if (sys.argv[1].upper() == "VAULTIP"):
-  NodeVaultIP(port, sys.argv[3])
+  args = sys.argv[2:]
+  while (len(args) > 0):
+    if (args[0] in node_opts):
+      if (args[0].lower() == "--port"):
+        try:
+          port = int(args[1])
+          args.pop(0)
+          args.pop(0)
+        except ValueError:
+          print(args[1] + " invalid port number")
+          sys.exit()
+      if (args[0].lower() == "--app"):
+        appName = args[1]
+        args.pop(0)
+        args.pop(0)
+      if (args[0].lower() == "--ip"):
+        ipadr = args[1]
+        args.pop(0)
+        args.pop(0)
+      if (args[0].lower() == "--dir"):
+        base_dir = args[1]
+        if (base_dir.endswith("/") == False):
+          base_dir = base_dir + "/"
+        args.pop(0)
+        args.pop(0)
+        if (os.path.isdir(base_dir) == False):
+          print(base_dir + " is not a directory or does not exist")
+    else:
+      files = args
+  if (port == -1):
+    print("Port number must be specified like --port 31234")
+    error = True
+  if (len(appName) == 0 and len(ipadr) == 0):
+    print("Application Name OR IP must be set but not Both! like: --appname myapp or --ip 2.3.45.6")
+    error = True
+  if (len(appName) > 0 and len(ipadr) > 0):
+    print("Application Name OR IP must be set but not Both! like: --appname myapp or --ip 2.3.45.6")
+    error = True
+  if (error == True):
+    usage(sys.argv)
+  else:
+    if (len(appName) > 0):
+      NodeVault(port, appName, base_dir)
+    else:
+      NodeVaultIP(port, ipadr, base_dir)
+  sys.exit()
 
 if (sys.argv[1].upper() == "TEST"):
   url = "https://api.runonflux.io/apps/location/" + sys.argv[3]
