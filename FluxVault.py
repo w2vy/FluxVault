@@ -12,7 +12,7 @@ import requests
 
 MAX_MESSAGE = 8192
 
-  vault_name = ""
+vault_name = ""
 RequestFiles = []
 
 def encrypt_data(keypem, data):
