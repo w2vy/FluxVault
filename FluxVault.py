@@ -15,7 +15,7 @@ MaxMessage = 8192
 VaultName = ""
 RequestFiles = []
 
-  def encrypt_data(keypem, data):
+def encrypt_data(keypem, data):
     key = RSA.import_key(keypem)
     session_key = get_random_bytes(16)
     # Encrypt the session key with the public RSA key
