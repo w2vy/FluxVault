@@ -3,6 +3,7 @@
 from Crypto.PublicKey import RSA
 from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES, PKCS1_OAEP
+import binascii
 import json
 import sys
 import os
@@ -136,15 +137,8 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
           return
         nkData = { "State": CONNECTED }
         # Copy file list into local variable
-        BootFiles = []
-        for fname in BOOTFILES:
-          try:
-            fh = open(file_dir+fname)
-            fh.close()
-            # File exists
-          except FileNotFoundError:
-            BootFiles.append(fname)
-        
+        BootFiles = BOOTFILES.copy()
+          
         while True:
           try:
               reply = ""
@@ -185,7 +179,8 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
                 else:
                   jdata = decrypt_aes_data(nkData["AESKEY"], data)
                 if (jdata["State"] == "DATA"):
-                  open(file_dir+BootFiles[0], "w").write(jdata["Body"])
+                  if (jdata["Status"] == "Success"):
+                    open(file_dir+BootFiles[0], "w").write(jdata["Body"])
                   BootFiles.pop(0)
                 # Send request for first (or next file)
                 # If no more we are Done (close connection?)
@@ -193,7 +188,13 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
                 if (len(BootFiles) == 0):
                   jdata = { "State": DONE, "fill": random }
                 else:
-                  jdata = { "State": REQUEST, "FILE": BootFiles[0], "fill": random }
+                  try:
+                    content = open(file_dir+BootFiles[0]).read()
+                    crc = binascii.crc32(content.encode("utf-8"))
+                    # File exists
+                  except FileNotFoundError:
+                    crc = 0
+                  jdata = { "State": REQUEST, "FILE": BootFiles[0], "crc32": crc, "fill": random }
                 reply = encrypt_aes_data(nkData["AESKEY"], jdata)
               if (len(reply) > 0):
                 reply += "\n"
@@ -277,12 +278,19 @@ def NodeVaultIP(port, AppIP, file_dir):
       break
     if (jdata["State"] == REQUEST):
       fname = jdata["FILE"]
+      crc = int(jdata["crc32"])
       jdata["State"] = "DATA"
       try:
         secret = open(file_dir+fname).read()
-        print("File ", fname, " sent!")
-        jdata["Body"] = secret
-        jdata["Status"] = "Success"
+        mycrc = binascii.crc32(secret.encode("utf-8"))
+        if (crc == mycrc):
+          print("File ", fname, " Match!")
+          jdata["Status"] = "Match"
+          jdata["Body"] = ""
+        else:
+          print("File ", fname, " sent!")
+          jdata["Body"] = secret
+          jdata["Status"] = "Success"
       except FileNotFoundError:
         print("File Not Found: " + file_dir+fname)
         jdata["Body"] = ""
