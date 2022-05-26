@@ -132,8 +132,8 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
         client = f'{self.client_address} on {threading.currentThread().getName()}'
         print(f'Connected: {client}')
         peer_ip = self.connection.getpeername()
-        result = socket.gethostbyname(  VAULT_NAME)
-        if peer_ip[0] != result:
+        result = socket.gethostbyname(VAULT_NAME)
+        if peer_ip[0] != result and peer_ip[0] != VAULT_NAME:
             print("Reject Connection, wrong IP:", peer_ip[0], result)
             time.sleep(15)
             return
