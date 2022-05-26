@@ -210,6 +210,10 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
         print(f'Closed: {client}')
 
 def node_server(port, vaultname, bootfiles, base):
+    global VAULT_NAME
+    global BOOTFILES
+    global FILE_DIR
+    
     VAULT_NAME = vaultname
     BOOTFILES = bootfiles
     FILE_DIR = base
