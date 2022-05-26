@@ -359,6 +359,7 @@ def main():
                         myport = int(args[1])
                         args.pop(0)
                         args.pop(0)
+                        continue
                     except ValueError:
                         print(args[1] + " invalid port number")
                         sys.exit()
@@ -366,12 +367,14 @@ def main():
                     vault = args[1]
                     args.pop(0)
                     args.pop(0)
+                    continue
                 if args[0].lower() == "--dir":
                     base_dir = args[1]
                     if base_dir.endswith("/") is False:
                         base_dir = base_dir + "/"
                     args.pop(0)
                     args.pop(0)
+                    continue
                     if os.path.isdir(base_dir) is False:
                         print(base_dir + " is not a directory or does not exist")
             else:
@@ -402,6 +405,7 @@ def main():
                         myport = int(args[1])
                         args.pop(0)
                         args.pop(0)
+                        continue
                     except ValueError:
                         print(args[1] + " invalid port number")
                         sys.exit()
@@ -409,16 +413,19 @@ def main():
                     app_name = args[1]
                     args.pop(0)
                     args.pop(0)
+                    continue
                 if args[0].lower() == "--ip":
                     ipadr = args[1]
                     args.pop(0)
                     args.pop(0)
+                    continue
                 if args[0].lower() == "--dir":
                     base_dir = args[1]
                     if base_dir.endswith("/") is False:
                         base_dir = base_dir + "/"
                     args.pop(0)
                     args.pop(0)
+                    continue
                     if os.path.isdir(base_dir) is False:
                         print(base_dir + " is not a directory or does not exist")
             else:
