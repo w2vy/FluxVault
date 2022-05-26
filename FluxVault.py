@@ -19,8 +19,6 @@ FILE_DIR = ""
 
 MAX_MESSAGE = 8192
 
-VAULT_NAME = ""
-
 def encrypt_data(keypem, data):
     key = RSA.import_key(keypem)
     session_key = get_random_bytes(16)
@@ -131,6 +129,7 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
     def handle(self):
         client = f'{self.client_address} on {threading.currentThread().getName()}'
         print(f'Connected: {client}')
+        print("NodeKeyClient ", VAULT_NAME)
         peer_ip = self.connection.getpeername()
         print("Peer ", peer_ip)
         result = socket.gethostbyname(VAULT_NAME)
@@ -214,6 +213,7 @@ def node_server(port, vaultname, bootfiles, base):
     VAULT_NAME = vaultname
     BOOTFILES = bootfiles
     FILE_DIR = base
+    print("node_server ", VAULT_NAME)
     if len(BOOTFILES) > 0:
         with ThreadedTCPServer(('', port), NodeKeyClient) as server:
             print("The NodeKeyClient server is running on port " + str(port))
