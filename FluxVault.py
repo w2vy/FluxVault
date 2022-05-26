@@ -13,9 +13,9 @@ from Crypto.PublicKey import RSA
 from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES, PKCS1_OAEP
 
-VAULT_NAME = ""
-BOOTFILES = []
-FILE_DIR = ""
+#VAULT_NAME = ""
+#BOOTFILES = []
+#FILE_DIR = ""
 
 MAX_MESSAGE = 8192
 
@@ -213,7 +213,7 @@ def node_server(port, vaultname, bootfiles, base):
     global VAULT_NAME
     global BOOTFILES
     global FILE_DIR
-    
+
     VAULT_NAME = vaultname
     BOOTFILES = bootfiles
     FILE_DIR = base
