@@ -13,13 +13,11 @@ from Crypto.PublicKey import RSA
 from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES, PKCS1_OAEP
 
-VAULT_NAME = ""
-BOOTFILES = []
-FILE_DIR = ""
+#VAULT_NAME = ""
+#BOOTFILES = []
+#FILE_DIR = ""
 
 MAX_MESSAGE = 8192
-
-VAULT_NAME = ""
 
 def encrypt_data(keypem, data):
     key = RSA.import_key(keypem)
@@ -132,7 +130,7 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
         client = f'{self.client_address} on {threading.currentThread().getName()}'
         print(f'Connected: {client}')
         peer_ip = self.connection.getpeername()
-        result = socket.gethostbyname(  VAULT_NAME)
+        result = socket.gethostbyname(VAULT_NAME)
         if peer_ip[0] != result:
             print("Reject Connection, wrong IP:", peer_ip[0], result)
             time.sleep(15)
@@ -200,18 +198,23 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
                                       "FILE": boot_files[0],
                                       "crc32": crc, "fill": random }
                         reply = encrypt_aes_data(nkdata["AESKEY"], jdata)
-                    if len(reply) > 0:
-                        reply += "\n"
-                        self.wfile.write(reply.encode("utf-8"))
+                if len(reply) > 0:
+                    reply += "\n"
+                    self.wfile.write(reply.encode("utf-8"))
             except ValueError:
                 print("try failed")
                 break
         print(f'Closed: {client}')
 
 def node_server(port, vaultname, bootfiles, base):
+    global VAULT_NAME
+    global BOOTFILES
+    global FILE_DIR
+
     VAULT_NAME = vaultname
     BOOTFILES = bootfiles
     FILE_DIR = base
+    print("node_server ", VAULT_NAME)
     if len(BOOTFILES) > 0:
         with ThreadedTCPServer(('', port), NodeKeyClient) as server:
             print("The NodeKeyClient server is running on port " + str(port))
