@@ -478,6 +478,7 @@ def main():
                 args.pop(0)
         if len(base_dir) > 0 and os.path.isdir(base_dir) is False:
             print(base_dir + " is not a directory or does not exist")
+            error = True
         if myport == -1:
             print("Port number must be specified like --port 31234")
             error = True
