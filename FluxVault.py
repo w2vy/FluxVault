@@ -129,12 +129,9 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
     def handle(self):
         client = f'{self.client_address} on {threading.currentThread().getName()}'
         print(f'Connected: {client}')
-        print("NodeKeyClient ", VAULT_NAME)
         peer_ip = self.connection.getpeername()
-        print("Peer ", peer_ip)
         result = socket.gethostbyname(VAULT_NAME)
-        print("Vault Host", VAULT_NAME, result)
-        if peer_ip[0] != result and peer_ip[0] != VAULT_NAME:
+        if peer_ip[0] != result:
             print("Reject Connection, wrong IP:", peer_ip[0], result)
             time.sleep(15)
             return
@@ -201,9 +198,9 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
                                       "FILE": boot_files[0],
                                       "crc32": crc, "fill": random }
                         reply = encrypt_aes_data(nkdata["AESKEY"], jdata)
-                    if len(reply) > 0:
-                        reply += "\n"
-                        self.wfile.write(reply.encode("utf-8"))
+                if len(reply) > 0:
+                    reply += "\n"
+                    self.wfile.write(reply.encode("utf-8"))
             except ValueError:
                 print("try failed")
                 break
