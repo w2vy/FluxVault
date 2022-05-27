@@ -1,25 +1,26 @@
 #!/usr/bin/python
-
+'''This module is a single file that supports the loading of secrets into a Flux Node'''
 import binascii
 import json
 import sys
 import os
 import time
-import requests
 import socketserver
 import threading
 import socket
+import requests
 from Crypto.PublicKey import RSA
 from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES, PKCS1_OAEP
 
-#VAULT_NAME = ""
-#BOOTFILES = []
-#FILE_DIR = ""
+VAULT_NAME = ""
+BOOTFILES = []
+FILE_DIR = ""
 
 MAX_MESSAGE = 8192
 
 def encrypt_data(keypem, data):
+    '''Used by the Vault to create and send a AES session key protected by RSA'''
     key = RSA.import_key(keypem)
     session_key = get_random_bytes(16)
     # Encrypt the session key with the public RSA key
@@ -39,6 +40,7 @@ def encrypt_data(keypem, data):
     return msg
 
 def decrypt_data(keypem, cipher):
+    '''Used by Node to decrypt the Session key'''
     private_key = RSA.import_key(keypem)
     enc_session_key = bytes.fromhex(cipher["enc_session_key"])
     nonce = bytes.fromhex(cipher["nonce"])
@@ -55,16 +57,19 @@ def decrypt_data(keypem, cipher):
     return data
 
 def send_aeskey(keypem, aeskey):
+    '''Encrypt data with the AES key to be sent'''
     message = encrypt_data(keypem, aeskey)
     return message
 
 def receive_aeskey(keypem, message):
+    '''Decrypt received data using teh AES key'''
     cipher = json.loads(message)
     data = decrypt_data(keypem, cipher)
     data = data.decode("utf-8")
     return data
 
 def decrypt_aes_data(key, data):
+    '''Decrypt data with AES key'''
     jdata = json.loads(data)
     nonce = bytes.fromhex(jdata["nonce"])
     tag = bytes.fromhex(jdata["tag"])
@@ -76,6 +81,7 @@ def decrypt_aes_data(key, data):
     return json.loads(msg)
 
 def encrypt_aes_data(key, message):
+    '''Encrypt message with AES key'''
     msg = json.dumps(message)
     cipher = AES.new(key, AES.MODE_EAX)
     ciphertext, tag = cipher.encrypt_and_digest(msg.encode("utf-8"))
@@ -88,6 +94,7 @@ def encrypt_aes_data(key, message):
     return data
 
 def send_receive(sock, request):
+    '''Send and receive a message'''
     request += "\n"
 
     try:
@@ -102,6 +109,7 @@ def send_receive(sock, request):
     return reply
 
 def receive_only(sock):
+    '''Receive a message'''
     # Receive data
     reply = sock.recv(MAX_MESSAGE)
     reply = reply.decode("utf-8")
@@ -121,11 +129,55 @@ AESKEY = "AESKEY"
  # worker thread, allowing much greater throughput because more clients can be handled
  # concurrently.
 
+def create_send_public_key(nkdata):
+    '''
+    # New incoming connection from Vault
+    # Create a new RSA key and send the Public Key the Vault
+    # We appear to ignore any initial data
+    '''
+    nkdata["RSAkey"] = RSA.generate(2048)
+    nkdata["Private"] = nkdata["RSAkey"].export_key()
+    nkdata["Public"] = nkdata["RSAkey"].publickey().export_key()
+    nkdata["State"] = KEYSENT
+    jdata = { "State": KEYSENT, "PublicKey": nkdata["Public"].decode("utf-8")}
+    reply = json.dumps(jdata) + "\n"
+    return reply
+
+def file_request_or_done(nkdata, boot_files, data):
+    '''Create File Request or Done message'''
+    if len(data) == 0:
+        jdata = {"State": READY}
+    else:
+        jdata = decrypt_aes_data(nkdata["AESKEY"], data)
+    if jdata["State"] == "DATA":
+        if jdata["Status"] == "Success":
+            open(FILE_DIR+boot_files[0], "w").write(jdata["Body"])
+        boot_files.pop(0)
+    # Send request for first (or next file)
+    # If no more we are Done (close connection?)
+    random = get_random_bytes(16).hex()
+    if len(boot_files) == 0:
+        jdata = { "State": DONE, "fill": random }
+    else:
+        try:
+            content = open(FILE_DIR+boot_files[0]).read()
+            crc = binascii.crc32(content.encode("utf-8"))
+            # File exists
+        except FileNotFoundError:
+            crc = 0
+        jdata = { "State": REQUEST,
+                    "FILE": boot_files[0],
+                    "crc32": crc, "fill": random }
+    reply = encrypt_aes_data(nkdata["AESKEY"], jdata)
+    return reply
+
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    '''Define threaded server'''
     daemon_threads = True
     allow_reuse_address = True
 
 class NodeKeyClient(socketserver.StreamRequestHandler):
+    '''Server Thread one per connection'''
     def handle(self):
         client = f'{self.client_address} on {threading.currentThread().getName()}'
         print(f'Connected: {client}')
@@ -143,70 +195,42 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
             try:
                 reply = ""
                 if nkdata["State"] == CONNECTED:
-                    # New incoming connection from Vault
-                    # Create a new RSA key and send the Public Key the Vault
-                    # We appear to ignore any initial data
-                    nkdata["RSAkey"] = RSA.generate(2048)
-                    nkdata["Private"] = nkdata["RSAkey"].export_key()
-                    nkdata["Public"] = nkdata["RSAkey"].publickey().export_key()
-                    nkdata["State"] = KEYSENT
-                    jdata = { "State": KEYSENT, "PublicKey": nkdata["Public"].decode("utf-8")}
-                    reply = json.dumps(jdata)
-                else:
-                    data = self.rfile.readline()
-                    if not data:
-                        break
-                    if nkdata["State"] == KEYSENT:
-                        jdata = json.loads(data)
-                        if jdata["State"] != AESKEY:
-                            break # Tollerate no errors
-                        nkdata["AESKEY"] = decrypt_data(nkdata["Private"], jdata)
-                        nkdata["State"] = STARTAES
-                        random = get_random_bytes(16).hex()
-                        jdata = { "State": STARTAES, "Text": "Test", "fill": random}
-                        reply = encrypt_aes_data(nkdata["AESKEY"], jdata)
-                    else:
-                        if nkdata["State"] == STARTAES:
-                            jdata = decrypt_aes_data(nkdata["AESKEY"], data)
-                            if jdata["State"] == STARTAES and jdata["Text"] == "Passed":
-                                nkdata["State"] = READY # We are good to go!
-                                data = ""
-                            else:
-                                break # Failed
-                    if nkdata["State"] == READY:
-                        if len(data) == 0:
-                            jdata = {"State": READY}
-                        else:
-                            jdata = decrypt_aes_data(nkdata["AESKEY"], data)
-                        if jdata["State"] == "DATA":
-                            if jdata["Status"] == "Success":
-                                open(FILE_DIR+boot_files[0], "w").write(jdata["Body"])
-                            boot_files.pop(0)
-                        # Send request for first (or next file)
-                        # If no more we are Done (close connection?)
-                        random = get_random_bytes(16).hex()
-                        if len(boot_files) == 0:
-                            jdata = { "State": DONE, "fill": random }
-                        else:
-                            try:
-                                content = open(FILE_DIR+boot_files[0]).read()
-                                crc = binascii.crc32(content.encode("utf-8"))
-                                # File exists
-                            except FileNotFoundError:
-                                crc = 0
-                            jdata = { "State": REQUEST,
-                                      "FILE": boot_files[0],
-                                      "crc32": crc, "fill": random }
-                        reply = encrypt_aes_data(nkdata["AESKEY"], jdata)
-                if len(reply) > 0:
-                    reply += "\n"
+                    reply = create_send_public_key(nkdata)
                     self.wfile.write(reply.encode("utf-8"))
+                    continue
+                data = self.rfile.readline()
+                if not data:
+                    break
+                if nkdata["State"] == KEYSENT:
+                    jdata = json.loads(data)
+                    if jdata["State"] != AESKEY:
+                        break # Tollerate no errors
+                    nkdata["AESKEY"] = decrypt_data(nkdata["Private"], jdata)
+                    nkdata["State"] = STARTAES
+                    random = get_random_bytes(16).hex()
+                    jdata = { "State": STARTAES, "Text": "Test", "fill": random}
+                    reply = encrypt_aes_data(nkdata["AESKEY"], jdata) + "\n"
+                    self.wfile.write(reply.encode("utf-8"))
+                    continue
+                if nkdata["State"] == STARTAES:
+                    jdata = decrypt_aes_data(nkdata["AESKEY"], data)
+                    if jdata["State"] == STARTAES and jdata["Text"] == "Passed":
+                        nkdata["State"] = READY # We are good to go!
+                        data = ""
+                    else:
+                        break # Failed
+                if nkdata["State"] == READY:
+                    reply = file_request_or_done(nkdata, boot_files, data) +"\n"
+                    self.wfile.write(reply.encode("utf-8"))
+                    continue
+                break # Unhandled case, abort
             except ValueError:
                 print("try failed")
                 break
         print(f'Closed: {client}')
 
 def node_server(port, vaultname, bootfiles, base):
+    '''This server runs on the Node, waiting for the Vault to connect'''
     global VAULT_NAME
     global BOOTFILES
     global FILE_DIR
@@ -222,19 +246,19 @@ def node_server(port, vaultname, bootfiles, base):
     else:
         print("BOOTFILES missing from comamnd line, see usage")
 
-def node_vault_ip(port, appip, file_dir):
-    # We have a node try sending it config data
+def open_connection(port, appip):
+    '''Open socket to Node'''
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     except socket.error:
         print('Failed to create socket')
-        return
+        return None
 
     try:
         remote_ip = socket.gethostbyname( appip )
     except socket.gaierror:
         print('Hostname could not be resolved')
-        return
+        return None
 
     # Set short timeout
     sock.settimeout(5)
@@ -243,36 +267,20 @@ def node_vault_ip(port, appip, file_dir):
     try:
         print('# Connecting to server, ' + appip + ' (' + remote_ip + ')')
         sock.connect((remote_ip , port))
+    except ConnectionRefusedError:
+        print("connection refused")
+        sock.close()
+        return None
     except socket.timeout:
         print("Connect timed out")
-        sock.close
-        return
+        sock.close()
+        return None
 
     sock.settimeout(None)
+    return sock
 
-    reply = receive_only(sock)
-
-    try:
-        jdata = json.loads(reply)
-        public_key = jdata["PublicKey"].encode("utf-8")
-    except ValueError:
-        print("No Public Key received:", reply)
-        return
-    # Generate and send AES Key encrypted with PublicKey
-    aeskey = get_random_bytes(16).hex().encode("utf-8")
-    jdata = send_aeskey(public_key, aeskey)
-    jdata["State"] = AESKEY
-    data = json.dumps(jdata)
-    reply = send_receive(sock, data)
-    # AES Encryption should be started now
-    jdata = decrypt_aes_data(aeskey, reply)
-    if jdata["State"] != STARTAES:
-        print("StartAES not found")
-        return
-    if jdata["Text"] != "Test":
-        print("StartAES Failed")
-        return
-    jdata["Text"] = "Passed"
+def send_files(sock, jdata, aeskey, file_dir):
+    '''Send files to node'''
     while True:
         data = encrypt_aes_data(aeskey, jdata)
         reply = send_receive(sock, data)
@@ -302,10 +310,44 @@ def node_vault_ip(port, appip, file_dir):
         else:
             jdata["Body"] = ""
             jdata["Status"] = "Unknown Command"
+
+def node_vault_ip(port, appip, file_dir):
+    '''We have a node try sending it config data'''
+
+    sock = open_connection(port, appip)
+    if sock is None:
+        return
+    
+    reply = receive_only(sock)
+
+    try:
+        jdata = json.loads(reply)
+        public_key = jdata["PublicKey"].encode("utf-8")
+    except ValueError:
+        print("No Public Key received:", reply)
+        return
+    # Generate and send AES Key encrypted with PublicKey
+    aeskey = get_random_bytes(16).hex().encode("utf-8")
+    jdata = send_aeskey(public_key, aeskey)
+    jdata["State"] = AESKEY
+    data = json.dumps(jdata)
+    reply = send_receive(sock, data)
+    # AES Encryption should be started now
+    jdata = decrypt_aes_data(aeskey, reply)
+    if jdata["State"] != STARTAES:
+        print("StartAES not found")
+        return
+    if jdata["Text"] != "Test":
+        print("StartAES Failed")
+        return
+    jdata["Text"] = "Passed"
+
+    send_files(sock, jdata, aeskey, file_dir)
     sock.close()
     return
 
 def node_vault(port, appname, file_dir):
+    '''Vault runs this to poll every node running their app'''
     url = "https://api.runonflux.io/apps/location/" + appname
     req = requests.get(url)
     if req.status_code == 200:
@@ -320,9 +362,9 @@ def node_vault(port, appname, file_dir):
             print("Error", req.text)
     else:
         print("Error", url, "Status", req.status_code)
-    return
 
 def usage(argv):
+    '''Display command usage'''
     print("Usage:")
     print(argv[0] + " Node --port port --vault VaultDomain [--dir dirname] file1 [file2 file3 ...]")
     print("")
@@ -345,6 +387,7 @@ NODE_OPTS = ["--port", "--vault", "--dir"]
 VAULT_OPTS = ["--port", "--app", "--ip", "--dir"]
 
 def main():
+    '''Main function'''
     files = []
     myport = -1
     vault = ""
@@ -378,11 +421,12 @@ def main():
                     args.pop(0)
                     args.pop(0)
                     continue
-                    if os.path.isdir(base_dir) is False:
-                        print(base_dir + " is not a directory or does not exist")
             else:
                 files = args
                 break
+        if len(base_dir) > 0 and os.path.isdir(base_dir) is False:
+            print(base_dir + " is not a directory or does not exist")
+            error = True
         if myport == -1:
             print("Port number must be specified like --port 31234")
             error = True
@@ -429,11 +473,11 @@ def main():
                     args.pop(0)
                     args.pop(0)
                     continue
-                    if os.path.isdir(base_dir) is False:
-                        print(base_dir + " is not a directory or does not exist")
             else:
                 print("Unknown option: ", args[0])
                 args.pop(0)
+        if len(base_dir) > 0 and os.path.isdir(base_dir) is False:
+            print(base_dir + " is not a directory or does not exist")
         if myport == -1:
             print("Port number must be specified like --port 31234")
             error = True
