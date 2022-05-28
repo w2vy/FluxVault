@@ -13,6 +13,7 @@ from Crypto.PublicKey import RSA
 from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES, PKCS1_OAEP
 
+# pylint: disable=W0603
 VAULT_NAME = ""
 BOOTFILES = []
 FILE_DIR = ""
@@ -317,7 +318,7 @@ def node_vault_ip(port, appip, file_dir):
     sock = open_connection(port, appip)
     if sock is None:
         return
-    
+
     reply = receive_only(sock)
 
     try:
@@ -383,120 +384,149 @@ def usage(argv):
 # node_server port VaultDomain
 # node_vault port NodeIP
 
+def check_port(args, port):
+    '''check and return port number'''
+    if len(args) > 0 and args[0].lower() == "--port":
+        try:
+            port = int(args[1])
+            args.pop(0)
+            args.pop(0)
+        except ValueError:
+            print(args[1] + " invalid port number")
+            sys.exit()
+    return args, port
+
+def check_vault(args, vault):
+    '''check and return vault name/ip'''
+    if len(args) > 0 and args[0].lower() == "--vault":
+        vault = args[1]
+        args.pop(0)
+        args.pop(0)
+    return args, vault
+
+def check_dir(args, base_dir):
+    '''check and return src/dest dir'''
+    if len(args) > 0 and args[0].lower() == "--dir":
+        base_dir = args[1]
+        if base_dir.endswith("/") is False:
+            base_dir = base_dir + "/"
+        args.pop(0)
+        args.pop(0)
+    return args, base_dir
+
+def check_app(args, app_name):
+    '''check and return app name'''
+    if args[0].lower() == "--app":
+        app_name = args[1]
+        args.pop(0)
+        args.pop(0)
+    return args, app_name
+
+def check_ip(args, ipadr):
+    '''check and return ip adr'''
+    if args[0].lower() == "--ip":
+        ipadr = args[1]
+        args.pop(0)
+        args.pop(0)
+    return args, ipadr
+
+def check_vault_args(base_dir, myport, app_name, ipadr):
+    '''verify the vault args are coherent'''
+    error = False
+    if len(base_dir) > 0 and os.path.isdir(base_dir) is False:
+        print(base_dir + " is not a directory or does not exist")
+        error = True
+    if myport == -1:
+        print("Port number must be specified like --port 31234")
+        error = True
+    if len(app_name) == 0 and len(ipadr) == 0:
+        print("Application Name OR IP must be set but not Both!",
+            " like: --appname myapp or --ip 2.3.45.6")
+        error = True
+    if len(app_name) > 0 and len(ipadr) > 0:
+        print("Application Name OR IP must be set but not Both!",
+            " like: --appname myapp or --ip 2.3.45.6")
+        error = True
+    return error
+
+def check_node_args(base_dir, myport, vault, files):
+    '''verify the node args are coherent'''
+    if len(base_dir) > 0 and os.path.isdir(base_dir) is False:
+        print(base_dir + " is not a directory or does not exist")
+        error = True
+    if myport == -1:
+        print("Port number must be specified like --port 31234")
+        error = True
+    if len(vault) == 0:
+        print("Vault Domain or IP must be set like:",
+            " --vault 1.2.3.4 or --vault my.vault.host.io")
+        error = True
+    if len(files) == 0:
+        print("Secret files must be listed after all other arguments")
+        error = True
+    return error
+
+def run_node(args):
+    '''run node app'''
+    files = []
+    myport = -1
+    vault = ""
+    base_dir = ""
+    error = False
+    while len(args) > 0:
+        if args[0] in NODE_OPTS:
+            args, myport = check_port(args, myport)
+            args, vault = check_vault(args, vault)
+            args, base_dir = check_dir(args, base_dir)
+        else:
+            files = args
+            break
+    error = check_node_args(base_dir, myport, vault, files)
+    if error is True:
+        usage(sys.argv)
+    else:
+        node_server(myport, vault, files, base_dir)
+
+def run_vault(args):
+    '''run vault app'''
+    myport = -1
+    base_dir = ""
+    ipadr = ""
+    app_name = ""
+    error = False
+    while len(args) > 0:
+        if args[0] in VAULT_OPTS:
+            args, myport = check_port(args, myport)
+            args, app_name = check_app(args, app_name)
+            args, ipadr = check_ip(args, ipadr)
+            args, base_dir = check_dir(args, base_dir)
+        else:
+            print("Unknown option: ", args[0])
+            args.pop(0)
+    error = check_vault_args(base_dir, myport, app_name, ipadr)
+    if error is True:
+        usage(sys.argv)
+    else:
+        if len(app_name) > 0:
+            node_vault(myport, app_name, base_dir)
+        else:
+            node_vault_ip(myport, ipadr, base_dir)
+
 NODE_OPTS = ["--port", "--vault", "--dir"]
 VAULT_OPTS = ["--port", "--app", "--ip", "--dir"]
 
 def main():
     '''Main function'''
-    files = []
-    myport = -1
-    vault = ""
-    base_dir = ""
-    ipadr = ""
-    app_name = ""
-    error = False
+    args = []
 
     if sys.argv[1].upper() == "NODE":
         args = sys.argv[2:]
-        while len(args) > 0:
-            if args[0] in NODE_OPTS:
-                if args[0].lower() == "--port":
-                    try:
-                        myport = int(args[1])
-                        args.pop(0)
-                        args.pop(0)
-                        continue
-                    except ValueError:
-                        print(args[1] + " invalid port number")
-                        sys.exit()
-                if args[0].lower() == "--vault":
-                    vault = args[1]
-                    args.pop(0)
-                    args.pop(0)
-                    continue
-                if args[0].lower() == "--dir":
-                    base_dir = args[1]
-                    if base_dir.endswith("/") is False:
-                        base_dir = base_dir + "/"
-                    args.pop(0)
-                    args.pop(0)
-                    continue
-            else:
-                files = args
-                break
-        if len(base_dir) > 0 and os.path.isdir(base_dir) is False:
-            print(base_dir + " is not a directory or does not exist")
-            error = True
-        if myport == -1:
-            print("Port number must be specified like --port 31234")
-            error = True
-        if len(vault) == 0:
-            print("Vault Domain or IP must be set like:",
-                " --vault 1.2.3.4 or --vault my.vault.host.io")
-            error = True
-        if len(files) == 0:
-            print("Secret files must be listed after all other arguments")
-            error = True
-        if error is True:
-            usage(sys.argv)
-        else:
-            node_server(myport, vault, files, base_dir)
+        run_node(args)
         sys.exit()
 
     if sys.argv[1].upper() == "VAULT":
         args = sys.argv[2:]
-        while len(args) > 0:
-            if args[0] in VAULT_OPTS:
-                if args[0].lower() == "--port":
-                    try:
-                        myport = int(args[1])
-                        args.pop(0)
-                        args.pop(0)
-                        continue
-                    except ValueError:
-                        print(args[1] + " invalid port number")
-                        sys.exit()
-                if args[0].lower() == "--app":
-                    app_name = args[1]
-                    args.pop(0)
-                    args.pop(0)
-                    continue
-                if args[0].lower() == "--ip":
-                    ipadr = args[1]
-                    args.pop(0)
-                    args.pop(0)
-                    continue
-                if args[0].lower() == "--dir":
-                    base_dir = args[1]
-                    if base_dir.endswith("/") is False:
-                        base_dir = base_dir + "/"
-                    args.pop(0)
-                    args.pop(0)
-                    continue
-            else:
-                print("Unknown option: ", args[0])
-                args.pop(0)
-        if len(base_dir) > 0 and os.path.isdir(base_dir) is False:
-            print(base_dir + " is not a directory or does not exist")
-            error = True
-        if myport == -1:
-            print("Port number must be specified like --port 31234")
-            error = True
-        if len(app_name) == 0 and len(ipadr) == 0:
-            print("Application Name OR IP must be set but not Both!",
-                " like: --appname myapp or --ip 2.3.45.6")
-            error = True
-        if len(app_name) > 0 and len(ipadr) > 0:
-            print("Application Name OR IP must be set but not Both!",
-                " like: --appname myapp or --ip 2.3.45.6")
-            error = True
-        if error is True:
-            usage(sys.argv)
-        else:
-            if len(app_name) > 0:
-                node_vault(myport, app_name, base_dir)
-            else:
-                node_vault_ip(myport, ipadr, base_dir)
+        run_vault(args)
         sys.exit()
 
 main()
