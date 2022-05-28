@@ -152,9 +152,9 @@ def file_request_or_done(nkdata, boot_files, data):
         jdata = decrypt_aes_data(nkdata["AESKEY"], data)
     if jdata["State"] == "DATA":
         if jdata["Status"] == "Success":
-            file = open(FILE_DIR+boot_files[0], "w", encoding="utf-8")
-            file.write(jdata["Body"])
-            file.close()
+            with open(FILE_DIR+boot_files[0], "w", encoding="utf-8") as file:
+                file.write(jdata["Body"])
+                file.close()
         boot_files.pop(0)
     # Send request for first (or next file)
     # If no more we are Done (close connection?)
@@ -163,9 +163,9 @@ def file_request_or_done(nkdata, boot_files, data):
         jdata = { "State": DONE, "fill": random }
     else:
         try:
-            file = open(FILE_DIR+boot_files[0], encoding="utf-8")
-            content = file.read()
-            file.close()
+            with open(FILE_DIR+boot_files[0], encoding="utf-8") as file:
+                content = file.read()
+                file.close()
             crc = binascii.crc32(content.encode("utf-8"))
             # File exists
         except FileNotFoundError:
@@ -298,9 +298,9 @@ def send_files(sock, jdata, aeskey, file_dir):
             crc = int(jdata["crc32"])
             jdata["State"] = "DATA"
             try:
-                file = open(file_dir+fname, encoding="utf-8")
-                secret = file.read()
-                file.close()
+                with open(file_dir+fname, encoding="utf-8") as file:
+                    secret = file.read()
+                    file.close()
                 mycrc = binascii.crc32(secret.encode("utf-8"))
                 if crc == mycrc:
                     print("File ", fname, " Match!")
