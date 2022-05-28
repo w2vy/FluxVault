@@ -42,7 +42,7 @@ In the Proof of Concept form you can open two terminal windows, one as the Node 
 
 In the Node enter the command:
 
-./FluxVault.py Node --port 39898 --vault localhost --dir temp/ quotes.txt readme.txt
+./vault.py Node --port 39898 --vault localhost --dir temp/ quotes.txt readme.txt
 
 Where 39898 is TCP port that will be used and localhost is the Domain name (or IP) that the Vault resides and the files will be stored in ./temp/
 
@@ -50,11 +50,13 @@ This will come up as a server and always be availble to the Vault. If a connecti
 
 In the Vault enter the command:
 
-./FluxVault.py Vault --port 39898 --ip 127.0.0.1 --dir files
+./vault.py Vault --port 39898 --ip 127.0.0.1 --dir files
 
 Where 39898 is the TCP port used and 127.0.0.1 is the IP address of the Flux Node where the App is running and the files will be read from ./files
 
 This will connect, negociate and finally request the file quotes.txt which will be printed to the terminal and the connection will close.
+
+In a production environment the --ip will be replaced with --app appName and the vault will connect to all Flux instances named appName
 
 # Dependencies
 
