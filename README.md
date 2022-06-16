@@ -42,7 +42,8 @@ In the Proof of Concept form you can open two terminal windows, one as the Node 
 
 In the Node enter the command:
 
-./vault.py Node --port 39898 --vault localhost --dir temp/ quotes.txt readme.txt
+mkdir /tmp/node
+./vault.py Node --port 39898 --vault localhost --dir /tmp/node quotes.txt readme.txt
 
 Where 39898 is TCP port that will be used and localhost is the Domain name (or IP) that the Vault resides and the files will be stored in ./temp/
 
@@ -76,7 +77,7 @@ It uses the following python libraries
 
 Crypto is obtained from the pycryptodome library, installed with 
 
-pip pycryptodome
+pip install pycryptodome
 
 The rest are standard python libraries
 

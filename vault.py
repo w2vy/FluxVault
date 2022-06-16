@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 '''This module is a single file that supports the loading of secrets into a Flux Node'''
 import binascii
 import json
@@ -422,7 +422,7 @@ def check_dir(args, base_dir):
 
 def check_app(args, app_name):
     '''check and return app name'''
-    if args[0].lower() == "--app":
+    if len(args) > 0 and args[0].lower() == "--app":
         app_name = args[1]
         args.pop(0)
         args.pop(0)
@@ -430,7 +430,7 @@ def check_app(args, app_name):
 
 def check_ip(args, ipadr):
     '''check and return ip adr'''
-    if args[0].lower() == "--ip":
+    if len(args) > 0 and args[0].lower() == "--ip":
         ipadr = args[1]
         args.pop(0)
         args.pop(0)
