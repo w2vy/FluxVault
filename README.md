@@ -45,11 +45,13 @@ In the Node enter the command:
 mkdir /tmp/node
 ./vault.py Node --port 39898 --vault localhost --dir /tmp/node quotes.txt readme.txt
 
-Where 39898 is TCP port that will be used and localhost is the Domain name (or IP) that the Vault resides and the files will be stored in ./temp/
+Where 39898 is TCP port that will be used and localhost is the Domain name (or IP) that the Vault resides and the files will be stored in /tmp/node
 
 This will come up as a server and always be availble to the Vault. If a connection comes in from a different address the connection will be rejected.
 
-In the Vault enter the command:
+This server will continue to run getting updates from the vault whenever it connects
+
+In a different shell start the Vault push with the command: (typically run from cron)
 
 ./vault.py Vault --port 39898 --ip 127.0.0.1 --dir files
 
