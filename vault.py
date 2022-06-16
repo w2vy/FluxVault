@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/python
 '''This module is a single file that supports the loading of secrets into a Flux Node'''
 import binascii
 import json
