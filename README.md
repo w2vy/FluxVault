@@ -57,7 +57,7 @@ In a different shell start the Vault push with the command: (typically run from 
 
 Where 39898 is the TCP port used and 127.0.0.1 is the IP address of the Flux Node where the App is running and the files will be read from ./files
 
-This will connect, negociate and finally request the file quotes.txt which will be printed to the terminal and the connection will close.
+This will connect, negociate and the node will request the files it wants (quotes.txt and readme.txt) which will be sent if the files are missing or have changed abd placed in /temp/node
 
 In a production environment the --ip will be replaced with --app appName and the vault will connect to all Flux instances named appName
 
