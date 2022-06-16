@@ -457,6 +457,7 @@ def check_vault_args(base_dir, myport, app_name, ipadr):
 
 def check_node_args(base_dir, myport, vault, files):
     '''verify the node args are coherent'''
+    error = False
     if len(base_dir) > 0 and os.path.isdir(base_dir) is False:
         print(base_dir + " is not a directory or does not exist")
         error = True
