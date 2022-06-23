@@ -59,20 +59,6 @@ def decrypt_data(keypem, cipher):
     data = cipher_aes.decrypt_and_verify(ciphertext, tag)
     return data
 
-'''
-def send_aeskey(keypem, aeskey):
-    #Encrypt data with the AES key to be sent
-    message = encrypt_data(keypem, aeskey)
-    return message
-
-def receive_aeskey(keypem, message):
-    #Decrypt received data using the AES key
-    cipher = json.loads(message)
-    data = decrypt_data(keypem, cipher)
-    data = data.decode("utf-8")
-    return data
- '''
-
 def decrypt_aes_data(key, data):
     '''
     Accept out cipher text object
@@ -222,7 +208,7 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
     TCP connection received
     '''
     def handle(self):
-        client = f'{self.client_address} on {threading.currentThread().getName()}'
+        client = f'{self.client_address} on {threading.current_thread().name}'
         print(f'Connected: {client}')
         # Verify the connection came from our Vault IP Address
         peer_ip = self.connection.getpeername()
