@@ -274,7 +274,7 @@ def node_server(port, vaultname, bootfiles, base):
     global BOOTFILES
     global FILE_DIR
 
-# TODO Pass these to the created thread that calls NodeKeyCllient instead of Globals
+# We should Pass these to the created thread that calls NodeKeyCllient instead of using Globals
     VAULT_NAME = vaultname
     BOOTFILES = bootfiles
     FILE_DIR = base
