@@ -105,7 +105,11 @@ def send_receive(sock, request):
         sys.exit()
 
     # Receive data
-    reply = sock.recv(MAX_MESSAGE)
+    try:
+        reply = sock.recv(MAX_MESSAGE)
+    except TimeoutError:
+        print('Receive time out')
+        return None
     reply = reply.decode("utf-8")
     return reply
 
@@ -266,22 +270,24 @@ def open_connection(port, appip):
         return None
 
     # Set short timeout
-    sock.settimeout(5)
+    sock.settimeout(30)
 
     # Connect to remote serverAESData
     try:
         print('# Connecting to server, ' + appip + ' (' + remote_ip + ')')
         sock.connect((remote_ip , port))
     except ConnectionRefusedError:
-        print("connection refused")
+        print(appip, "connection refused")
         sock.close()
         return None
     except socket.timeout:
-        print("Connect timed out")
+        print(appip, "Connect timed out")
         sock.close()
         return None
 
     sock.settimeout(None)
+    # Set longer timeout
+    sock.settimeout(60)
     return sock
 
 def send_files(sock, jdata, aeskey, file_dir):
@@ -289,6 +295,9 @@ def send_files(sock, jdata, aeskey, file_dir):
     while True:
         data = encrypt_aes_data(aeskey, jdata)
         reply = send_receive(sock, data)
+        if reply is None:
+            print('Receive Time out')
+            return
         jdata = decrypt_aes_data(aeskey, reply)
         reply = ""
         if jdata["State"] == DONE:
@@ -323,15 +332,22 @@ def node_vault_ip(port, appip, file_dir):
 
     sock = open_connection(port, appip)
     if sock is None:
+        print('Could not create socket')
         return
 
-    reply = receive_only(sock)
+    try:
+        reply = receive_only(sock)
+    except TimeoutError:
+        sock.close()
+        print('Receive Public Key timed out')
+        return
 
     try:
         jdata = json.loads(reply)
         public_key = jdata["PublicKey"].encode("utf-8")
     except ValueError:
         print("No Public Key received:", reply)
+        sock.close()
         return
     # Generate and send AES Key encrypted with PublicKey
     aeskey = get_random_bytes(16).hex().encode("utf-8")
@@ -339,12 +355,18 @@ def node_vault_ip(port, appip, file_dir):
     jdata["State"] = AESKEY
     data = json.dumps(jdata)
     reply = send_receive(sock, data)
+    if reply is None:
+        sock.close()
+        print('Receive Time out')
+        return
     # AES Encryption should be started now
     jdata = decrypt_aes_data(aeskey, reply)
     if jdata["State"] != STARTAES:
+        sock.close()
         print("StartAES not found")
         return
     if jdata["Text"] != "Test":
+        sock.close()
         print("StartAES Failed")
         return
     jdata["Text"] = "Passed"
