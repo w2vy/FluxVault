@@ -146,7 +146,7 @@ def create_send_public_key(nkdata):
     nkdata["State"] = KEYSENT
     jdata = { "State": KEYSENT, "PublicKey": nkdata["Public"].decode("utf-8")}
     reply = json.dumps(jdata) + "\n"
-    # TODO signed_reply = flux_node_sign_message(reply)
+    # Add this signed_reply = flux_node_sign_message(reply)
     return reply, nkdata
 
 def file_request_or_done(nkdata, boot_files, data):
@@ -389,67 +389,57 @@ def node_vault_ip(port, appip, file_dir):
         print('Could not create socket')
         return
 
-    try:
-        reply = receive_only(sock)
-    except TimeoutError:
-        sock.close()
-        print('Receive Public Key timed out')
-        return
+    while True:
+        # Node will generate a RSA Public/Private key pair and send us the Public Key
+        # this message will be signed by the Flux Node private key so we can authenticate
+        # that we are connected to node we expect (no man in the middle)
 
-    # Node will generate a RSA Public/Private key pair and send us the Public Key
-    # this message will be signed by the Flux Node private key so we can authenticate
-    # that we are connected to node we expect (no man in the middle)
+        try:
+            reply = receive_only(sock)
+        except TimeoutError:
+            print('Receive Public Key timed out')
+            break
 
-    reply = receive_only(sock)
+        if len(reply) == 0:
+            print("No Public Key message received")
+            break
 
-    if len(reply) == 0:
-        print("No Public Key message received")
-        return
+        try:
+            jdata = json.loads(reply)
+            public_key = jdata["PublicKey"].encode("utf-8")
+        except ValueError:
+            print("No Public Key received:", reply)
+            break
 
-    # auth_ok = verify_signature(nodeid, reply)
-    # if auth_ok is False:
-    #   print("***************** Man in the Middle ****************")
-    #   return
+        # Generate and send AES Key encrypted with PublicKey just received
+        # These are only used for this session and are memory resident
+        aeskey = get_random_bytes(16).hex().encode("utf-8")
+        # Create a cypher message (json) and the data is simply the aeskey we will use
+        jdata = encrypt_data(public_key, aeskey)
+        # The State reflects what format the cypher message is
+        jdata["State"] = AESKEY
+        data = json.dumps(jdata)
 
-    try:
-        jdata = json.loads(reply)
-        public_key = jdata["PublicKey"].encode("utf-8")
-    except ValueError:
-        print("No Public Key received:", reply)
-        sock.close()
-        return
+        # Send the message and wait for the reply to verify the key exchange was successful
+        reply = send_receive(sock, data)
+        if reply is None:
+            print('Receive Time out')
+            break
+        # AES Encryption should be started now, decrypt the message and validate the reply
+        jdata = decrypt_aes_data(aeskey, reply)
+        if jdata["State"] != STARTAES:
+            print("StartAES not found")
+            break
+        if jdata["Text"] != "Test":
+            print("StartAES Failed")
+            break
+        # Form and format looks good, prepare reply and indicate we Passed
+        jdata["Text"] = "Passed"
 
-    # Generate and send AES Key encrypted with PublicKey just received
-    # These are only used for this session and are memory resident
-    aeskey = get_random_bytes(16).hex().encode("utf-8")
-    # Create a cypher message (json) and the data is simply the aeskey we will use
-    jdata = encrypt_data(public_key, aeskey)
-    # The State reflects what format the cypher message is
-    jdata["State"] = AESKEY
-    data = json.dumps(jdata)
-
-    # Send the message and wait for the reply to verify the key exchange was successful
-    reply = send_receive(sock, data)
-    if reply is None:
-        sock.close()
-        print('Receive Time out')
-        return
-    # AES Encryption should be started now, decrypt the message and validate the reply
-    jdata = decrypt_aes_data(aeskey, reply)
-    if jdata["State"] != STARTAES:
-        sock.close()
-        print("StartAES not found")
-        return
-    if jdata["Text"] != "Test":
-        sock.close()
-        print("StartAES Failed")
-        return
-    # Form and format looks good, prepare reply and indicate we Passed
-    jdata["Text"] = "Passed"
-
-    # This function will send the reply and process any file requests it receives
-    # The rest of the session will use the aeskey to protect the session
-    send_files(sock, jdata, aeskey, file_dir)
+        # This function will send the reply and process any file requests it receives
+        # The rest of the session will use the aeskey to protect the session
+        send_files(sock, jdata, aeskey, file_dir)
+        break
     sock.close()
     return
 
