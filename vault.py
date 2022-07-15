@@ -20,6 +20,16 @@ FILE_DIR = ""
 
 MAX_MESSAGE = 8192
 
+CONNECTED = "CONNECTED"
+KEYSENT = "KEYSENT"
+STARTAES = "STARTAES"
+PASSED = "PASSED"
+READY = "READY"
+REQUEST = "REQUEST"
+DONE = "DONE"
+AESKEY = "AESKEY"
+FAILED = "FAILED"
+
 # Utility routines used by Node, Vault or Both
 
 def encrypt_data(keypem, data):
@@ -122,174 +132,216 @@ def receive_only(sock):
     reply = reply.decode("utf-8")
     return reply
 
-CONNECTED = "CONNECTED"
-KEYSENT = "KEYSENT"
-STARTAES = "STARTAES"
-READY = "READY"
-REQUEST = "REQUEST"
-DONE = "DONE"
-AESKEY = "AESKEY"
+class FluxNode:
+    '''Create a small server that runs on the Node waiting for Vault to connect'''
+    def __init__(self, vault_name: str, peer_ip) -> None:
+        self.user_files = []
+        self.user_agent_first = False
+        self.reply = ""
+        self.request = ""
+        self.user_initialize()
+         # Verify the connection came from our Vault IP Address
+        result = socket.gethostbyname(vault_name)
+        if peer_ip[0] != result:
+            # Delay invalid peer to defend against DOS attack
+            time.sleep(15)
+            raise "Reject Connection, wrong IP:" + peer_ip[0] + " Expected " + result
+        self.nkdata = { "State": CONNECTED }
+        self.user_request_count = 1
 
-def create_send_public_key(nkdata):
-    '''
-    New incoming connection from Vault
-    Create a new RSA key and send the Public Key the Vault
-    The message should be signed by the Flux Node we are running on
-    so we can authenticate the message
+    def current_state(self) -> str:
+        '''Returns current state of the Node Key Data'''
+        return self.nkdata["State"]
 
-    This is the only message sent unencrypted.
-    This is Ok because the Public Key can be Public
-    '''
-    nkdata["RSAkey"] = RSA.generate(2048)
-    nkdata["Private"] = nkdata["RSAkey"].export_key()
-    nkdata["Public"] = nkdata["RSAkey"].publickey().export_key()
-    nkdata["State"] = KEYSENT
-    jdata = { "State": KEYSENT, "PublicKey": nkdata["Public"].decode("utf-8")}
-    reply = json.dumps(jdata) + "\n"
-    # Add this signed_reply = flux_node_sign_message(reply)
-    return reply, nkdata
+    def create_send_public_key(self):
+        '''
+        New incoming connection from Vault
+        Create a new RSA key and send the Public Key the Vault
+        The message should be signed by the Flux Node we are running on
+        so we can authenticate the message
 
-def file_request_or_done(nkdata, boot_files, data):
-    '''
-    Create File Request or Done message
+        This is the only message sent unencrypted.
+        This is Ok because the Public Key can be Public
+        '''
+        self.nkdata["RSAkey"] = RSA.generate(2048)
+        self.nkdata["Private"] = self.nkdata["RSAkey"].export_key()
+        self.nkdata["Public"] = self.nkdata["RSAkey"].publickey().export_key()
+        self.nkdata["State"] = KEYSENT
+        jdata = { "State": KEYSENT, "PublicKey": self.nkdata["Public"].decode("utf-8")}
+        reply = json.dumps(jdata) + "\n"
+        # Add this signed_reply = flux_node_sign_message(reply)
+        return reply
 
-    The first pass through we have no reply from Vault since we consumed it
-    verifying that the encryption was started correctly len(data) == 0
-
-    The app will be responsible for checking for or handling any missing files
-    this server does not require any of the BOOTFILES to be received, that is
-    an application problem.
-
-    The application could use any of these files as a way to apply updates to the
-    config, this is only a tool to securely pass a file from a secure server to the node
-    It is also the responsibility of the node to store the data received in a secure location
-    From testing it appears that storing files in a tmpfs (RAM Disk) does provide a resaonable
-    level of security. Only the app developer can evaluate how precious the data is and
-    what safeguards need to be taken.
-    '''
-    if len(data) == 0:
-        jdata = {"State": READY}
-    else:
-        jdata = decrypt_aes_data(nkdata["AESKEY"], data)
-    if jdata["State"] == "DATA":
-        # We have received data and the status is Success, save the data in the file
-        # Notice that Match and File Not Found are silently ignored, see notes above.
-        if jdata["Status"] == "Success":
-            with open(FILE_DIR+boot_files[0], "w", encoding="utf-8") as file:
-                file.write(jdata["Body"])
-                file.close()
-        boot_files.pop(0)
-    # Send request for first (or next file)
-    # If no more we are Done (close connection?)
-    random = get_random_bytes(16).hex()
-    if len(boot_files) == 0:
-        jdata = { "State": DONE, "fill": random }
-    else:
-        # Open the file and compute the crc, set crc=0 if not found
+    def process_message(self, data) -> str:
+        '''Process incoming message to get to the Ready state and then capture incoming request'''
         try:
-            with open(FILE_DIR+boot_files[0], encoding="utf-8") as file:
+            self.reply = ""
+            # We send our Public key and expect an AES Key for our session, if not Get Out
+            if self.nkdata["State"] == KEYSENT:
+                jdata = json.loads(data)
+                if jdata["State"] != AESKEY:
+                    self.nkdata["State"] = FAILED # Tollerate no errors
+                else:
+                    # Decrypt with our RSA Private Key
+                    self.nkdata["AESKEY"] = decrypt_data(self.nkdata["Private"], jdata)
+                    self.nkdata["State"] = STARTAES
+                    # Send a test encryption message, always include random data
+                    random = get_random_bytes(16).hex()
+                    jdata = { "State": STARTAES, "Text": "Test", "fill": random}
+                    # Encrypt with AES Key and send reply
+                    self.reply = encrypt_aes_data(self.nkdata["AESKEY"], jdata) # + "\n"
+            else:
+                if self.nkdata["State"] == STARTAES:
+                    # Do we both have the same AES Key?
+                    jdata = decrypt_aes_data(self.nkdata["AESKEY"], data)
+                    if jdata["State"] == STARTAES and jdata["Text"] == "Passed":
+                        self.nkdata["State"] = PASSED # We are good to go!
+                    else:
+                        self.nkdata["State"] = FAILED # Tollerate no errors
+            if self.nkdata["State"] == PASSED:
+                self.nkdata["State"] = READY
+                self.request = {"State": READY}
+            if self.nkdata["State"] == READY:
+                # Decrypt message from Vault so user code can handle it
+                # This will be a reply to a request the Node made
+                # The user code will then issue a new request or call done
+                self.request = decrypt_aes_data(self.nkdata["AESKEY"], data)
+            else:
+                self.nkdata["State"] = FAILED # Unhandled case, abort
+        except ValueError:
+            # Decryption error or unhandled exception with close connection
+            self.nkdata["State"] = FAILED
+            print("try failed")
+        return self.current_state()
+
+    def agent(self):
+        '''
+        Handle Agent replies, allow User Agent to override defaults is self.user_agent_first is true
+        If the agent or user_agent do not handle the request we abort the connection. otherwise
+        agent calls the user_request function to with a step number 1..n
+        The default user_request function will request all files define in the bootfiles array
+        '''
+        processed = False
+        if self.user_agent_first:
+            processed = self.user_agent()
+        if not self.processed:
+            processed = self.default_agent()
+        if not processed and not self.user_agent_first:
+            processed = self.user_agent()
+        if not processed:
+            return FAILED
+        # The Received message was processed, generate the next request
+        if self.user_request(self.user_request_count):
+            self.user_request_count = self.user_request_count + 1
+            random = get_random_bytes(16).hex()
+            self.request["fill"] = random
+            self.reply = encrypt_aes_data(self.nkdata["AESKEY"], self.request)
+            return PASSED
+        return FAILED
+
+    def default_agent(self) -> bool:
+        '''Node side processing of vault replies for all predefined actions'''
+        if self.request["State"] == "DATA":
+            # We have received data and the status is Success, save the data in the file
+            # Notice that Match and File Not Found are silently ignored, see notes above.
+            if self.request["Status"] == "Success":
+                with open(FILE_DIR+self.request["FILE"], "w", encoding="utf-8") as file:
+                    file.write(self.request["Body"])
+                    file.close()
+                    return True
+            if self.request["Status"] == "Match":
+                return True
+            if self.request["Status"] == "FileNotFound":
+                return True
+        return False
+
+    def request_done(self) -> None:
+        '''Tell vault we are done'''
+        self.request = { "State": DONE }
+
+    def request_file(self, fname) -> None:
+        '''Open the file and compute the crc, set crc=0 if not found'''
+        try:
+            with open(FILE_DIR+fname, encoding="utf-8") as file:
                 content = file.read()
                 file.close()
             crc = binascii.crc32(content.encode("utf-8"))
             # File exists
         except FileNotFoundError:
             crc = 0
-        jdata = { "State": REQUEST,
-                    "FILE": boot_files[0],
-                    "crc32": crc, "fill": random }
-    # Return the next file request or Done message
-    reply = encrypt_aes_data(nkdata["AESKEY"], jdata)
-    return reply
+        self.request = { "State": REQUEST, "FILE": fname, "crc32": crc }
 
-class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
-    '''Define threaded server'''
-    daemon_threads = True
-    allow_reuse_address = True
+    def user_agent(self):
+        '''defined by User Class if needed'''
+        return False
 
-class NodeKeyClient(socketserver.StreamRequestHandler):
-    '''
-    ThreadedTCPServer creates a new thread and calls this function for each
-    TCP connection received
-    '''
-    def handle(self):
-        client = f'{self.client_address} on {threading.current_thread().name}'
-        print(f'Connected: {client}')
-        # Verify the connection came from our Vault IP Address
-        peer_ip = self.connection.getpeername()
-        result = socket.gethostbyname(VAULT_NAME)
-        if peer_ip[0] != result:
-            print("Reject Connection, wrong IP:", peer_ip[0], result)
-            # Delay invalid peer to defend against DOS attack
-            time.sleep(15)
-            return
-        nkdata = { "State": CONNECTED }
-        # Copy file list into local variable
-        boot_files = BOOTFILES.copy()
+    def user_initialize(self) -> None:
+        '''Defined by User class'''
+        return
 
-        while True:
+    def user_request(self, step) -> bool:
+        '''Defined by User class, if needed'''
+        if step in range(1, len(self.user_files)):
+            self.request_file(self.user_files[step-1])
+        return False
+
+    """ def handle_request(self, data):
+        '''
+        Handle File Request or other message
+
+        The first pass through we have no reply from Vault since we consumed it
+        verifying that the encryption was started correctly len(data) == 0
+
+        The user code will be responsible for requesting any agent actions and placing files
+        here the application needs them, secuely if needed.
+
+        The current agent actions supported are:
+
+        DONE - Tell agent Node is Done
+        FILE - Get file from Vault if changed or missing
+
+        The application could use any of these files as a way to apply updates to the
+        config, this is only a tool to securely pass a file from a secure server to the node
+        It is also the responsibility of the node to store the data received in a secure location
+        From testing it appears that storing files in a tmpfs (RAM Disk) does provide a resaonable
+        level of security. Only the app developer can evaluate how precious the data is and
+        what safeguards need to be taken.
+        '''
+        if len(data) == 0:
+            jdata = {"State": READY}
+        else:
+            jdata = decrypt_aes_data(self.nkdata["AESKEY"], data)
+        if jdata["State"] == "DATA":
+            # We have received data and the status is Success, save the data in the file
+            # Notice that Match and File Not Found are silently ignored, see notes above.
+            if jdata["Status"] == "Success":
+                with open(FILE_DIR+boot_files[0], "w", encoding="utf-8") as file:
+                    file.write(jdata["Body"])
+                    file.close()
+            boot_files.pop(0)
+        # Send request for first (or next file)
+        # If no more we are Done (close connection?)
+        random = get_random_bytes(16).hex()
+        if len(boot_files) == 0:
+            jdata = { "State": DONE, "fill": random }
+        else:
+            # Open the file and compute the crc, set crc=0 if not found
             try:
-                reply = ""
-                if nkdata["State"] == CONNECTED:
-                    reply, nkdata = create_send_public_key(nkdata)
-                    self.wfile.write(reply.encode("utf-8"))
-                    continue
-                data = self.rfile.readline()
-                if not data:
-                    # No Message - Get Out
-                    break
-                # We send our Public key and expect an AES Key for our session, if not Get Out
-                if nkdata["State"] == KEYSENT:
-                    jdata = json.loads(data)
-                    if jdata["State"] != AESKEY:
-                        break # Tollerate no errors
-                    # Decrypt with our RSA Private Key
-                    nkdata["AESKEY"] = decrypt_data(nkdata["Private"], jdata)
-                    nkdata["State"] = STARTAES
-                    # Send a test encryption message, always include random data
-                    random = get_random_bytes(16).hex()
-                    jdata = { "State": STARTAES, "Text": "Test", "fill": random}
-                    # Encrypt with AES Key and send reply
-                    reply = encrypt_aes_data(nkdata["AESKEY"], jdata) + "\n"
-                    self.wfile.write(reply.encode("utf-8"))
-                    continue
-                if nkdata["State"] == STARTAES:
-                    # Do we both have the same AES Key?
-                    jdata = decrypt_aes_data(nkdata["AESKEY"], data)
-                    if jdata["State"] == STARTAES and jdata["Text"] == "Passed":
-                        nkdata["State"] = READY # We are good to go!
-                        data = ""
-                    else:
-                        break # Failed - Get Out!
-                if nkdata["State"] == READY:
-                    # Send a file request for each file we care about (BOOTFILES)
-                    reply = file_request_or_done(nkdata, boot_files, data) +"\n"
-                    self.wfile.write(reply.encode("utf-8"))
-                    continue
-                break # Unhandled case, abort
-            except ValueError:
-                # Decryption error or unhandled exception with close connection
-                print("try failed")
-                break
-        print(f'Closed: {client}')
+                with open(FILE_DIR+boot_files[0], encoding="utf-8") as file:
+                    content = file.read()
+                    file.close()
+                crc = binascii.crc32(content.encode("utf-8"))
+                # File exists
+            except FileNotFoundError:
+                crc = 0
+            jdata = { "State": REQUEST,
+                        "FILE": boot_files[0],
+                        "crc32": crc, "fill": random }
+        # Return the next file request or Done message
+        reply = encrypt_aes_data(nkdata["AESKEY"], jdata)
+        return reply """
 
-def node_server(port, vaultname, bootfiles, base):
-    '''This server runs on the Node, waiting for the Vault to connect'''
-    global VAULT_NAME
-    global BOOTFILES
-    global FILE_DIR
-
-# We should Pass these to the created thread that calls NodeKeyCllient instead of using Globals
-    VAULT_NAME = vaultname
-    BOOTFILES = bootfiles
-    FILE_DIR = base
-    print("node_server ", VAULT_NAME)
-    if len(BOOTFILES) > 0:
-        with ThreadedTCPServer(('', port), NodeKeyClient) as server:
-            print("The NodeKeyClient server is running on port " + str(port))
-            server.serve_forever()
-    else:
-        print("BOOTFILES missing from comamnd line, see usage")
-
+# Routines for fluxVault class
 def open_connection(port, appip):
     '''Open socket to Node'''
     try:
@@ -314,10 +366,21 @@ def open_connection(port, appip):
     except ConnectionRefusedError:
         print(appip, "connection refused")
         sock.close()
-        return None
-    except socket.timeout:
-        print(appip, "Connect timed out")
+        sock = None
+    except TimeoutError:
+        print(appip, "Connect TimeoutError")
         sock.close()
+        sock = None
+    except socket.error:
+        print(appip, "No route to host")
+        sock.close()
+        sock = None
+#    except socket.timeout:
+#        print(appip, "Connect timed out")
+#        sock.close()
+#        sock = None
+
+    if sock is None:
         return None
 
     sock.settimeout(None)
@@ -325,57 +388,56 @@ def open_connection(port, appip):
     sock.settimeout(60)
     return sock
 
-def send_files(sock, jdata, aeskey, file_dir):
-    '''
-    This is called once the connection has successfully performed and verifyed the key exchange
-    The jdata passed in has the Passed message which will be sent first and then the
-    file requests will be processed.
+class FluxVault:
+    '''Class for the Secure Vault Agent, runs on secured trusted server or PC behind firewall'''
+    def __init__(self) -> None:
+        # super(fluxVault, self).__init__()
+        self.request = {}
+        self.agent_requests = {}
+        self.file_dir = ""
+        self.initialize()
 
-    At the moment only a file REQUEST command is supported, it may be of use to add
-    additional comands such as 'CSR' to create an ssl certificate or some other actions
-    that must be executed on a secure server
-    '''
-    while True:
-        # Encrypt the latest reply
-        data = encrypt_aes_data(aeskey, jdata)
-        reply = send_receive(sock, data)
-        if reply is None:
-            print('Receive Time out')
-            return
-        # Reply sent and next command received, decrypt and process
-        jdata = decrypt_aes_data(aeskey, reply)
-        reply = ""
+    def initialize(self) -> None:
+        '''Define in User Class to set global options'''
+        self.agent_requests[DONE] = self.node_done()
+        self.agent_requests[REQUEST] = self.node_request()
+
+    def vault_agent(self):
+        '''Invokes requested agent action defined by FluxVault or user defined class'''
+        jdata = self.agent_requests.get(self.request["State"], None)
+        return jdata
+
+    def node_done(self):
+        '''Node is done witr this session'''
         # The Node is done with us, Get Out!
-        if jdata["State"] == DONE:
-            break
-        # The Node wants an update of a file
-        if jdata["State"] == REQUEST:
-            fname = jdata["FILE"]
-            crc = int(jdata["crc32"])
-            jdata["State"] = "DATA"
-            # Open the file, read contents and compute the crc
-            # if the CRC matches no need to resent
-            # if it does not exist locally report the error
-            try:
-                with open(file_dir+fname, encoding="utf-8") as file:
-                    secret = file.read()
-                    file.close()
-                mycrc = binascii.crc32(secret.encode("utf-8"))
-                if crc == mycrc:
-                    print("File ", fname, " Match!")
-                    jdata["Status"] = "Match"
-                    jdata["Body"] = ""
-                else:
-                    print("File ", fname, " sent!")
-                    jdata["Body"] = secret
-                    jdata["Status"] = "Success"
-            except FileNotFoundError:
-                print("File Not Found: " + file_dir+fname)
-                jdata["Body"] = ""
-                jdata["Status"] = "FileNotFound"
-        else:
-            jdata["Body"] = ""
-            jdata["Status"] = "Unknown Command"
+        return self.request
+
+    def node_request(self):
+        '''Node is requesting a file'''
+        fname = self.request["FILE"]
+        crc = int(self.request["crc32"])
+        self.request["State"] = "DATA"
+        # Open the file, read contents and compute the crc
+        # if the CRC matches no need to resent
+        # if it does not exist locally report the error
+        try:
+            with open(self.file_dir+fname, encoding="utf-8") as file:
+                secret = file.read()
+                file.close()
+            mycrc = binascii.crc32(secret.encode("utf-8"))
+            if crc == mycrc:
+                print("File ", fname, " Match!")
+                self.request["Status"] = "Match"
+                self.request["Body"] = ""
+            else:
+                print("File ", fname, " sent!")
+                self.request["Body"] = secret
+                self.request["Status"] = "Success"
+        except FileNotFoundError:
+            print("File Not Found: " + self.file_dir+fname)
+            self.request["Body"] = ""
+            self.request["Status"] = "FileNotFound"
+        return self.request
 
 def node_vault_ip(port, appip, file_dir):
     '''
@@ -389,6 +451,8 @@ def node_vault_ip(port, appip, file_dir):
         print('Could not create socket')
         return
 
+    agent = FluxVault()
+    agent.file_dir = file_dir
     while True:
         # Node will generate a RSA Public/Private key pair and send us the Public Key
         # this message will be signed by the Flux Node private key so we can authenticate
@@ -438,7 +502,22 @@ def node_vault_ip(port, appip, file_dir):
 
         # This function will send the reply and process any file requests it receives
         # The rest of the session will use the aeskey to protect the session
-        send_files(sock, jdata, aeskey, file_dir)
+        #send_files(sock, jdata, aeskey, file_dir)
+        while True:
+            # Encrypt the latest reply
+            data = encrypt_aes_data(aeskey, jdata)
+            reply = send_receive(sock, data)
+            if reply is None:
+                print('Receive Time out')
+                break
+            # Reply sent and next command received, decrypt and process
+            agent.request = decrypt_aes_data(aeskey, reply)
+            # call vault_agent functions
+            jdata = agent.vault_agent()
+            if jdata is None:
+                break
+            if jdata["State"] == DONE:
+                break
         break
     sock.close()
     return
@@ -461,6 +540,57 @@ def node_vault(port, appname, file_dir):
             print("Error", req.text)
     else:
         print("Error", url, "Status", req.status_code)
+
+class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    '''Define threaded server'''
+    daemon_threads = True
+    allow_reuse_address = True
+
+class NodeKeyClient(socketserver.StreamRequestHandler):
+    '''
+    ThreadedTCPServer creates a new thread and calls this function for each
+    TCP connection received
+    '''
+def handle(self):
+    '''Handle new thread that accepted a new connection'''
+    client = f'{self.client_address} on {threading.current_thread().name}'
+    print(f'Connected: {client}')
+    peer_ip = self.connection.getpeername()
+    # Create new fluxVault Object
+    vault_session = FluxNode(VAULT_NAME, peer_ip)
+    reply = vault_session.create_send_public_key()
+
+    while True:
+        if len(reply) > 0:
+            self.wfile.write(reply.encode("utf-8"))
+
+        data = self.rfile.readline()
+        if not data:
+            # No Message - Get Out
+            break
+        state = vault_session.process_message(data)
+        if state == READY:
+            state = vault_session.agent() # process agent commands
+        if state == FAILED:
+            # Something went wrong, abort
+            break
+        reply = vault_session.reply
+    print(f'Closed: {client}')
+
+def node_server(port, vaultname, bootfiles, base):
+    '''This server runs on the Node, waiting for the Vault to connect'''
+    global VAULT_NAME
+    global BOOTFILES
+    global FILE_DIR
+
+# We should Pass these to the created thread that calls NodeKeyCllient instead of using Globals
+    VAULT_NAME = vaultname
+    BOOTFILES = bootfiles
+    FILE_DIR = base
+    print("node_server ", VAULT_NAME)
+    with ThreadedTCPServer(('', port), NodeKeyClient) as server:
+        print("The NodeKeyClient server is running on port " + str(port))
+        server.serve_forever()
 
 NODE_OPTS = ["--port", "--vault", "--dir"]
 VAULT_OPTS = ["--port", "--app", "--ip", "--dir"]
@@ -625,7 +755,7 @@ def run_vault(args):
     --port - TCP Port number to use for contact to the Node
     --app  - Flux Application name - Required if --ip is not specified
     --ip   - IP Address of Application - Required if --app is not specified
-             The IP does not need to be a Flux Node, for testing eg localhost, etc
+            The IP does not need to be a Flux Node, for testing eg localhost, etc
     '''
     myport = -1
     base_dir = ""
