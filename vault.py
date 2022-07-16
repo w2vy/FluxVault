@@ -30,6 +30,10 @@ DONE = "DONE"
 AESKEY = "AESKEY"
 FAILED = "FAILED"
 
+# Agent Responses
+
+DATA = "DATA"
+
 # Utility routines used by Node, Vault or Both
 
 def encrypt_data(keypem, data):
@@ -136,10 +140,10 @@ class FluxNode:
     '''Create a small server that runs on the Node waiting for Vault to connect'''
     def __init__(self, vault_name: str, peer_ip) -> None:
         self.user_files = []
-        self.user_agent_first = False
         self.reply = ""
         self.request = ""
-        self.user_initialize()
+        self.agent_response = {}
+        self.agent_response[DATA] = self.agent_data
          # Verify the connection came from our Vault IP Address
         result = socket.gethostbyname(vault_name)
         if peer_ip[0] != result:
@@ -216,30 +220,25 @@ class FluxNode:
 
     def agent(self):
         '''
-        Handle Agent replies, allow User Agent to override defaults is self.user_agent_first is true
-        If the agent or user_agent do not handle the request we abort the connection. otherwise
-        agent calls the user_request function to with a step number 1..n
+        Handle Agent replies, the response "State" field tells us what action is needed.
+        Each State should be unique because the state value (string) is used to
+        define the function called in the self.agent_response dict
+
+        If the none of the agent functions do not handle the request we abort the connection,
+        otherwise the agent calls the user_request function to with a step number 1..n
         The default user_request function will request all files define in the bootfiles array
         '''
-        processed = False
-        if self.user_agent_first:
-            processed = self.user_agent()
-        if not self.processed:
-            processed = self.default_agent()
-        if not processed and not self.user_agent_first:
-            processed = self.user_agent()
-        if not processed:
-            return FAILED
-        # The Received message was processed, generate the next request
-        if self.user_request(self.user_request_count):
-            self.user_request_count = self.user_request_count + 1
-            random = get_random_bytes(16).hex()
-            self.request["fill"] = random
-            self.reply = encrypt_aes_data(self.nkdata["AESKEY"], self.request)
-            return PASSED
+        if self.agent_response[self.request["State"]]():
+            # The Received message was processed, generate the next request
+            if self.user_request(self.user_request_count):
+                self.user_request_count = self.user_request_count + 1
+                random = get_random_bytes(16).hex()
+                self.request["fill"] = random
+                self.reply = encrypt_aes_data(self.nkdata["AESKEY"], self.request)
+                return PASSED
         return FAILED
 
-    def default_agent(self) -> bool:
+    def agent_data(self) -> bool:
         '''Node side processing of vault replies for all predefined actions'''
         if self.request["State"] == "DATA":
             # We have received data and the status is Success, save the data in the file
@@ -271,75 +270,11 @@ class FluxNode:
             crc = 0
         self.request = { "State": REQUEST, "FILE": fname, "crc32": crc }
 
-    def user_agent(self):
-        '''defined by User Class if needed'''
-        return False
-
-    def user_initialize(self) -> None:
-        '''Defined by User class'''
-        return
-
     def user_request(self, step) -> bool:
         '''Defined by User class, if needed'''
         if step in range(1, len(self.user_files)):
             self.request_file(self.user_files[step-1])
         return False
-
-    """ def handle_request(self, data):
-        '''
-        Handle File Request or other message
-
-        The first pass through we have no reply from Vault since we consumed it
-        verifying that the encryption was started correctly len(data) == 0
-
-        The user code will be responsible for requesting any agent actions and placing files
-        here the application needs them, secuely if needed.
-
-        The current agent actions supported are:
-
-        DONE - Tell agent Node is Done
-        FILE - Get file from Vault if changed or missing
-
-        The application could use any of these files as a way to apply updates to the
-        config, this is only a tool to securely pass a file from a secure server to the node
-        It is also the responsibility of the node to store the data received in a secure location
-        From testing it appears that storing files in a tmpfs (RAM Disk) does provide a resaonable
-        level of security. Only the app developer can evaluate how precious the data is and
-        what safeguards need to be taken.
-        '''
-        if len(data) == 0:
-            jdata = {"State": READY}
-        else:
-            jdata = decrypt_aes_data(self.nkdata["AESKEY"], data)
-        if jdata["State"] == "DATA":
-            # We have received data and the status is Success, save the data in the file
-            # Notice that Match and File Not Found are silently ignored, see notes above.
-            if jdata["Status"] == "Success":
-                with open(FILE_DIR+boot_files[0], "w", encoding="utf-8") as file:
-                    file.write(jdata["Body"])
-                    file.close()
-            boot_files.pop(0)
-        # Send request for first (or next file)
-        # If no more we are Done (close connection?)
-        random = get_random_bytes(16).hex()
-        if len(boot_files) == 0:
-            jdata = { "State": DONE, "fill": random }
-        else:
-            # Open the file and compute the crc, set crc=0 if not found
-            try:
-                with open(FILE_DIR+boot_files[0], encoding="utf-8") as file:
-                    content = file.read()
-                    file.close()
-                crc = binascii.crc32(content.encode("utf-8"))
-                # File exists
-            except FileNotFoundError:
-                crc = 0
-            jdata = { "State": REQUEST,
-                        "FILE": boot_files[0],
-                        "crc32": crc, "fill": random }
-        # Return the next file request or Done message
-        reply = encrypt_aes_data(nkdata["AESKEY"], jdata)
-        return reply """
 
 # Routines for fluxVault class
 def open_connection(port, appip):
