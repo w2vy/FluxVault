@@ -138,20 +138,47 @@ def receive_only(sock):
 
 class FluxNode:
     '''Create a small server that runs on the Node waiting for Vault to connect'''
-    def __init__(self, vault_name: str, peer_ip) -> None:
+    def __init__(self) -> None:
+        self.vault_name = ""
         self.user_files = []
+        self.file_dir = ""
         self.reply = ""
         self.request = ""
         self.agent_response = {}
         self.agent_response[DATA] = self.agent_data
+
+    def connected(self, peer_ip: str):
          # Verify the connection came from our Vault IP Address
-        result = socket.gethostbyname(vault_name)
+        result = socket.gethostbyname(self.vault_name)
+        if len(self.vault_name) == 0:
+            raise "Vault Name not configured in FluxNode class or child class"
         if peer_ip[0] != result:
             # Delay invalid peer to defend against DOS attack
             time.sleep(15)
             raise "Reject Connection, wrong IP:" + peer_ip[0] + " Expected " + result
         self.nkdata = { "State": CONNECTED }
         self.user_request_count = 1
+
+    def handle(self, read, write):
+        reply = self.create_send_public_key()
+
+        while True:
+            if len(reply) > 0:
+                write(reply.encode("utf-8"))
+
+            data = read()
+            if not data:
+                # No Message - Get Out
+                break
+            state = self.node.process_message(data)
+            if state == READY:
+                state = self.node.agent() # process agent commands
+            if state == FAILED:
+                # Something went wrong, abort
+                break
+            reply = self.node.reply
+        # When we return the connection is closed
+
 
     def current_state(self) -> str:
         '''Returns current state of the Node Key Data'''
@@ -244,7 +271,7 @@ class FluxNode:
             # We have received data and the status is Success, save the data in the file
             # Notice that Match and File Not Found are silently ignored, see notes above.
             if self.request["Status"] == "Success":
-                with open(FILE_DIR+self.request["FILE"], "w", encoding="utf-8") as file:
+                with open(self.file_dir+self.request["FILE"], "w", encoding="utf-8") as file:
                     file.write(self.request["Body"])
                     file.close()
                     return True
@@ -476,7 +503,7 @@ def node_vault(port, appname, file_dir):
     else:
         print("Error", url, "Status", req.status_code)
 
-class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+""" class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     '''Define threaded server'''
     daemon_threads = True
     allow_reuse_address = True
@@ -526,6 +553,7 @@ def node_server(port, vaultname, bootfiles, base):
     with ThreadedTCPServer(('', port), NodeKeyClient) as server:
         print("The NodeKeyClient server is running on port " + str(port))
         server.serve_forever()
+ """
 
 NODE_OPTS = ["--port", "--vault", "--dir"]
 VAULT_OPTS = ["--port", "--app", "--ip", "--dir"]

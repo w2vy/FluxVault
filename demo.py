@@ -14,12 +14,53 @@ from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES, PKCS1_OAEP
 import vault
 
-# pylint: disable=W0603
-VAULT_NAME = ""
-BOOTFILES = []
-FILE_DIR = ""
+# py lint: disable=W0603
+VAULT_NAME = "localhost"                    # EDIT ME
+BOOTFILES = ["quotes.txt", "readme.txt"]    # EDIT ME
+FILE_DIR = "/tmp/node"                      # EDIT ME
+VAULT_PORT = 39898                          # EDIT ME
 
-MAX_MESSAGE = 8192
+class MyFluxNode(vault.FluxNode):
+    def __init__(self) -> None:
+        super().__init__()
+        self.vault_name = VAULT_NAME
+        self.user_files = BOOTFILES
+        self.file_dir = FILE_DIR
+
+
+class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    '''Define threaded server'''
+    daemon_threads = True
+    allow_reuse_address = True
+
+class NodeKeyClient(socketserver.StreamRequestHandler):
+    '''
+    ThreadedTCPServer creates a new thread and calls this function for each
+    TCP connection received
+    '''
+    def __init__(self, request, client_address, server) -> None:
+        super().__init__(request, client_address, server)
+        self.node = MyFluxNode()
+
+def handle(self):
+    '''Handle new thread that accepted a new connection'''
+    client = f'{self.client_address} on {threading.current_thread().name}'
+    print(f'Connected: {client}')
+    peer_ip = self.connection.getpeername()
+    # Create new fluxVault Object
+    self.node.connected(peer_ip) # raise exception if wrong IP
+    self.node.handle(self.rfile.readline, self.wfile.write)
+    print(f'Closed: {client}')
+
+def node_server():
+    '''This server runs on the Node, waiting for the Vault to connect'''
+
+    print("node_server ", VAULT_NAME)
+    with ThreadedTCPServer(('', VAULT_PORT), NodeKeyClient) as server:
+        print("The NodeKeyClient server is running on port " + str(VAULT_PORT))
+        server.serve_forever()
+
+
 
 def open_connection(port, appip):
     '''Open socket to Node'''
