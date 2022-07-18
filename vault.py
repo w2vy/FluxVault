@@ -3,12 +3,8 @@
 import binascii
 import json
 import sys
-import os
 import time
-import socketserver
-import threading
 import socket
-import requests
 from Crypto.PublicKey import RSA
 from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES, PKCS1_OAEP
@@ -20,6 +16,7 @@ FILE_DIR = ""
 
 MAX_MESSAGE = 8192
 
+DISCONNECTED = "DISCONNECTED"
 CONNECTED = "CONNECTED"
 KEYSENT = "KEYSENT"
 STARTAES = "STARTAES"
@@ -136,30 +133,56 @@ def receive_only(sock):
     reply = reply.decode("utf-8")
     return reply
 
+def receive_public_key(sock):
+    '''Receive Public Key from the Node or return None on error'''
+    try:
+        reply = receive_only(sock)
+    except TimeoutError:
+        print('Receive Public Key timed out')
+        return None
+
+    if len(reply) == 0:
+        print("No Public Key message received")
+        return None
+    try:
+        jdata = json.loads(reply)
+        public_key = jdata["PublicKey"].encode("utf-8")
+    except ValueError:
+        print("No Public Key received:", reply)
+        return None
+    return public_key
+
 class FluxNode:
     '''Create a small server that runs on the Node waiting for Vault to connect'''
+    vault_name = "fluxnode"
+    user_files = []
+    file_dir = ""
     def __init__(self) -> None:
-        self.vault_name = ""
-        self.user_files = []
-        self.file_dir = ""
-        self.reply = ""
+        self.nkdata = { "State": DISCONNECTED }
+        self.user_request_count = 1
+        self.reply = "reply"
         self.request = ""
         self.agent_response = {}
         self.agent_response[DATA] = self.agent_data
 
-    def connected(self, peer_ip: str):
+    def connected(self, peer_ip: str) -> bool:
+        '''Call when connection is established to verify correct source IP'''
          # Verify the connection came from our Vault IP Address
         result = socket.gethostbyname(self.vault_name)
         if len(self.vault_name) == 0:
-            raise "Vault Name not configured in FluxNode class or child class"
+            print("Vault Name not configured in FluxNode class or child class")
+            return False
         if peer_ip[0] != result:
             # Delay invalid peer to defend against DOS attack
             time.sleep(15)
-            raise "Reject Connection, wrong IP:" + peer_ip[0] + " Expected " + result
+            print( "Reject Connection, wrong IP:" + peer_ip[0] + " Expected " + result)
+            return False
         self.nkdata = { "State": CONNECTED }
         self.user_request_count = 1
+        return True
 
     def handle(self, read, write):
+        '''Gets called from socket thread to handle incoming data'''
         reply = self.create_send_public_key()
 
         while True:
@@ -170,13 +193,13 @@ class FluxNode:
             if not data:
                 # No Message - Get Out
                 break
-            state = self.node.process_message(data)
+            state = self.process_message(data)
             if state == READY:
-                state = self.node.agent() # process agent commands
+                state = self.agent_action() # process agent commands
             if state == FAILED:
                 # Something went wrong, abort
                 break
-            reply = self.node.reply
+            reply = self.reply
         # When we return the connection is closed
 
 
@@ -245,7 +268,7 @@ class FluxNode:
             print("try failed")
         return self.current_state()
 
-    def agent(self):
+    def agent_action(self):
         '''
         Handle Agent replies, the response "State" field tells us what action is needed.
         Each State should be unique because the state value (string) is used to
@@ -350,23 +373,27 @@ def open_connection(port, appip):
     sock.settimeout(60)
     return sock
 
-class FluxVault:
+class FluxAgent:
     '''Class for the Secure Vault Agent, runs on secured trusted server or PC behind firewall'''
     def __init__(self) -> None:
         # super(fluxVault, self).__init__()
         self.request = {}
         self.agent_requests = {}
         self.file_dir = ""
+        self.vault_port = 0
         self.initialize()
 
     def initialize(self) -> None:
         '''Define in User Class to set global options'''
-        self.agent_requests[DONE] = self.node_done()
-        self.agent_requests[REQUEST] = self.node_request()
+        self.agent_requests[DONE] = self.node_done
+        self.agent_requests[REQUEST] = self.node_request
 
     def vault_agent(self):
         '''Invokes requested agent action defined by FluxVault or user defined class'''
-        jdata = self.agent_requests.get(self.request["State"], None)
+        node_func = self.agent_requests.get(self.request["State"], None)
+        if node_func is None:
+            return None
+        jdata = node_func(self)
         return jdata
 
     def node_done(self):
@@ -401,90 +428,79 @@ class FluxVault:
             self.request["Status"] = "FileNotFound"
         return self.request
 
-def node_vault_ip(port, appip, file_dir):
-    '''
-    This is where all the Vault work is done.
-    Use the port and appip to connect to a Node and give it files it asks for
-    '''
+    def node_vault_ip(self, appip):
+        '''
+        This is where all the Vault work is done.
+        Use the port and appip to connect to a Node and give it files it asks for
+        '''
 
-    # Open socket to the node
-    sock = open_connection(port, appip)
-    if sock is None:
-        print('Could not create socket')
-        return
+        if self.vault_port == 0:
+            print("vault_port Not set!")
+            return
+        # Open socket to the node
+        sock = open_connection(self.vault_port, appip)
+        if sock is None:
+            print('Could not create socket')
+            return
 
-    agent = FluxVault()
-    agent.file_dir = file_dir
-    while True:
-        # Node will generate a RSA Public/Private key pair and send us the Public Key
-        # this message will be signed by the Flux Node private key so we can authenticate
-        # that we are connected to node we expect (no man in the middle)
-
-        try:
-            reply = receive_only(sock)
-        except TimeoutError:
-            print('Receive Public Key timed out')
-            break
-
-        if len(reply) == 0:
-            print("No Public Key message received")
-            break
-
-        try:
-            jdata = json.loads(reply)
-            public_key = jdata["PublicKey"].encode("utf-8")
-        except ValueError:
-            print("No Public Key received:", reply)
-            break
-
-        # Generate and send AES Key encrypted with PublicKey just received
-        # These are only used for this session and are memory resident
-        aeskey = get_random_bytes(16).hex().encode("utf-8")
-        # Create a cypher message (json) and the data is simply the aeskey we will use
-        jdata = encrypt_data(public_key, aeskey)
-        # The State reflects what format the cypher message is
-        jdata["State"] = AESKEY
-        data = json.dumps(jdata)
-
-        # Send the message and wait for the reply to verify the key exchange was successful
-        reply = send_receive(sock, data)
-        if reply is None:
-            print('Receive Time out')
-            break
-        # AES Encryption should be started now, decrypt the message and validate the reply
-        jdata = decrypt_aes_data(aeskey, reply)
-        if jdata["State"] != STARTAES:
-            print("StartAES not found")
-            break
-        if jdata["Text"] != "Test":
-            print("StartAES Failed")
-            break
-        # Form and format looks good, prepare reply and indicate we Passed
-        jdata["Text"] = "Passed"
-
-        # This function will send the reply and process any file requests it receives
-        # The rest of the session will use the aeskey to protect the session
-        #send_files(sock, jdata, aeskey, file_dir)
+        # Use While loop to allow graceful escape on error
         while True:
-            # Encrypt the latest reply
-            data = encrypt_aes_data(aeskey, jdata)
+            # Node will generate a RSA Public/Private key pair and send us the Public Key
+            # this message will be signed by the Flux Node private key so we can authenticate
+            # that we are connected to node we expect (no man in the middle)
+
+            public_key = receive_public_key(sock)
+            if public_key is None:
+                break
+
+            # Generate and send AES Key encrypted with PublicKey just received
+            # These are only used for this session and are memory resident
+            aeskey = get_random_bytes(16).hex().encode("utf-8")
+            # Create a cypher message (json) and the data is simply the aeskey we will use
+            jdata = encrypt_data(public_key, aeskey)
+            # The State reflects what format the cypher message is
+            jdata["State"] = AESKEY
+            data = json.dumps(jdata)
+
+            # Send the message and wait for the reply to verify the key exchange was successful
             reply = send_receive(sock, data)
             if reply is None:
                 print('Receive Time out')
                 break
-            # Reply sent and next command received, decrypt and process
-            agent.request = decrypt_aes_data(aeskey, reply)
-            # call vault_agent functions
-            jdata = agent.vault_agent()
-            if jdata is None:
+            # AES Encryption should be started now, decrypt the message and validate the reply
+            jdata = decrypt_aes_data(aeskey, reply)
+            if jdata["State"] != STARTAES:
+                print("StartAES not found")
                 break
-            if jdata["State"] == DONE:
+            if jdata["Text"] != "Test":
+                print("StartAES Failed")
                 break
-        break
-    sock.close()
-    return
+            # Form and format looks good, prepare reply and indicate we Passed
+            jdata["Text"] = "Passed"
 
-def node_vault(port, appname, file_dir):
+            # This function will send the reply and process any file requests it receives
+            # The rest of the session will use the aeskey to protect the session
+            #send_files(sock, jdata, aeskey, file_dir)
+            while True:
+                # Encrypt the latest reply
+                data = encrypt_aes_data(aeskey, jdata)
+                reply = send_receive(sock, data)
+                if reply is None:
+                    print('Receive Time out')
+                    break
+                # Reply sent and next command received, decrypt and process
+                self.request = decrypt_aes_data(aeskey, reply)
+                # call vault_agent functions
+                jdata = self.vault_agent()
+                if jdata is None:
+                    break
+                if jdata["State"] == DONE:
+                    break
+            break
+        sock.close()
+        return
+
+""" def node_vault(port, appname, file_dir):
     '''Vault runs this to poll every Flux node running their app'''
     url = "https://api.runonflux.io/apps/location/" + appname
     req = requests.get(url)
@@ -502,7 +518,7 @@ def node_vault(port, appname, file_dir):
             print("Error", req.text)
     else:
         print("Error", url, "Status", req.status_code)
-
+ """
 """ class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     '''Define threaded server'''
     daemon_threads = True
@@ -555,7 +571,7 @@ def node_server(port, vaultname, bootfiles, base):
         server.serve_forever()
  """
 
-NODE_OPTS = ["--port", "--vault", "--dir"]
+""" NODE_OPTS = ["--port", "--vault", "--dir"]
 VAULT_OPTS = ["--port", "--app", "--ip", "--dir"]
 
 def usage(argv):
@@ -765,3 +781,4 @@ def main():
         sys.exit()
 
 main()
+ """
