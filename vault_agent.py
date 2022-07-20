@@ -44,11 +44,14 @@ if __name__ == "__main__":
             ipaddr = sys.argv[2]
             one_node = MyFluxAgent()
             one_node.node_vault_ip(ipaddr)
+            sys.exit(0)
         else:
             print("Missing Node IP Address: --ip ipaddress")
     if len(sys.argv[1]) == 0:
         node_vault()
+        sys.exit(0)
     else:
         print("Incorrect arguments:")
         print("With no arguments all nodes running ", APP_NAME, " will be polled")
         print("If you specify '--ip ipaddress' then that ipaddress will be polled")
+        sys.exit(1)

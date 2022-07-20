@@ -29,6 +29,7 @@ FAILED = "FAILED"
 
 # Agent Responses
 
+# Use PASSED as initial dummy state
 DATA = "DATA"
 
 # Utility routines used by Node, Vault or Both
@@ -108,6 +109,7 @@ def send_receive(sock, request):
     Send a request message and wait for a reply
     '''
     request += "\n"
+    print("request len ", len(request), " data ", request)
 
     try:
         sock.sendall(request.encode("utf-8"))
@@ -121,6 +123,7 @@ def send_receive(sock, request):
     except TimeoutError:
         print('Receive time out')
         return None
+    print("Reply len ", len(reply), " data ", reply)
     reply = reply.decode("utf-8")
     return reply
 
@@ -163,6 +166,7 @@ class FluxNode:
         self.reply = "reply"
         self.request = ""
         self.agent_response = {}
+        self.agent_response[PASSED] = self.agent_passed
         self.agent_response[DATA] = self.agent_data
 
     def connected(self, peer_ip: str) -> bool:
@@ -187,20 +191,25 @@ class FluxNode:
 
         while True:
             if len(reply) > 0:
+                print("Reply ", len(reply), reply)
                 write(reply.encode("utf-8"))
 
             data = read()
+            print("Read ", len(data), data)
             if not data:
                 # No Message - Get Out
                 break
             state = self.process_message(data)
+            print("process message", state, self.request)
             if state == READY:
                 state = self.agent_action() # process agent commands
+                print("action", state)
             if state == FAILED:
                 # Something went wrong, abort
                 break
             reply = self.reply
         # When we return the connection is closed
+        print("Handle exit", state)
 
 
     def current_state(self) -> str:
@@ -231,6 +240,7 @@ class FluxNode:
         try:
             self.reply = ""
             # We send our Public key and expect an AES Key for our session, if not Get Out
+            print("process", self.nkdata["State"], data)
             if self.nkdata["State"] == KEYSENT:
                 jdata = json.loads(data)
                 if jdata["State"] != AESKEY:
@@ -243,7 +253,7 @@ class FluxNode:
                     random = get_random_bytes(16).hex()
                     jdata = { "State": STARTAES, "Text": "Test", "fill": random}
                     # Encrypt with AES Key and send reply
-                    self.reply = encrypt_aes_data(self.nkdata["AESKEY"], jdata) # + "\n"
+                    self.reply = encrypt_aes_data(self.nkdata["AESKEY"], jdata) + "\n"
             else:
                 if self.nkdata["State"] == STARTAES:
                     # Do we both have the same AES Key?
@@ -252,20 +262,20 @@ class FluxNode:
                         self.nkdata["State"] = PASSED # We are good to go!
                     else:
                         self.nkdata["State"] = FAILED # Tollerate no errors
-            if self.nkdata["State"] == PASSED:
-                self.nkdata["State"] = READY
-                self.request = {"State": READY}
             if self.nkdata["State"] == READY:
                 # Decrypt message from Vault so user code can handle it
                 # This will be a reply to a request the Node made
                 # The user code will then issue a new request or call done
                 self.request = decrypt_aes_data(self.nkdata["AESKEY"], data)
-            else:
-                self.nkdata["State"] = FAILED # Unhandled case, abort
+                print("READY request", self.request)
+            if self.nkdata["State"] == PASSED:
+                print("PASSED")
+                self.nkdata["State"] = READY
+                self.request = {"State": PASSED} # Initial state, no reply, send first request
         except ValueError:
             # Decryption error or unhandled exception with close connection
             self.nkdata["State"] = FAILED
-            print("try failed")
+            print("process message failed")
         return self.current_state()
 
     def agent_action(self):
@@ -278,6 +288,7 @@ class FluxNode:
         otherwise the agent calls the user_request function to with a step number 1..n
         The default user_request function will request all files define in the bootfiles array
         '''
+        print("request", self.request)
         if self.agent_response[self.request["State"]]():
             # The Received message was processed, generate the next request
             if self.user_request(self.user_request_count):
@@ -288,20 +299,25 @@ class FluxNode:
                 return PASSED
         return FAILED
 
+    def agent_passed(self) -> bool:
+        '''Node side processing of vault replies for all predefined actions'''
+        if self.request["State"] == PASSED:
+            print("Agent PASSED")
+            return True
+        print("Agent PASSED Failed")
+        return False
+
     def agent_data(self) -> bool:
         '''Node side processing of vault replies for all predefined actions'''
-        if self.request["State"] == "DATA":
-            # We have received data and the status is Success, save the data in the file
-            # Notice that Match and File Not Found are silently ignored, see notes above.
-            if self.request["Status"] == "Success":
-                with open(self.file_dir+self.request["FILE"], "w", encoding="utf-8") as file:
-                    file.write(self.request["Body"])
-                    file.close()
-                    return True
-            if self.request["Status"] == "Match":
+        if self.request["State"] == DATA:
+            with open(self.file_dir+self.request["FILE"], "w", encoding="utf-8") as file:
+                file.write(self.request["Body"])
+                file.close()
                 return True
-            if self.request["Status"] == "FileNotFound":
-                return True
+        if self.request["Status"] == "Match":
+            return True
+        if self.request["Status"] == "FileNotFound":
+            return True
         return False
 
     def request_done(self) -> None:
@@ -322,8 +338,10 @@ class FluxNode:
 
     def user_request(self, step) -> bool:
         '''Defined by User class, if needed'''
+        print("User Request")
         if step in range(1, len(self.user_files)):
             self.request_file(self.user_files[step-1])
+            return True
         return False
 
 # Routines for fluxVault class
@@ -453,6 +471,7 @@ class FluxAgent:
             if public_key is None:
                 break
 
+            print("Public Key", public_key)
             # Generate and send AES Key encrypted with PublicKey just received
             # These are only used for this session and are memory resident
             aeskey = get_random_bytes(16).hex().encode("utf-8")
@@ -462,6 +481,7 @@ class FluxAgent:
             jdata["State"] = AESKEY
             data = json.dumps(jdata)
 
+            print("Send PK", jdata)
             # Send the message and wait for the reply to verify the key exchange was successful
             reply = send_receive(sock, data)
             if reply is None:
