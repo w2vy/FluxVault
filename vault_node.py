@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 '''This module is a single file that supports the loading of secrets into a Flux Node'''
 import socketserver
 import threading
