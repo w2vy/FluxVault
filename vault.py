@@ -85,7 +85,7 @@ def decrypt_aes_data(key, data):
         # let's assume that the key is somehow available again
         cipher = AES.new(key, AES.MODE_EAX, nonce)
         msg = cipher.decrypt_and_verify(ciphertext, tag)
-    except:
+    except ValueError:
         return { "State": FAILED}
     return json.loads(msg)
 
@@ -112,7 +112,6 @@ def send_receive(sock, request):
     Send a request message and wait for a reply
     '''
     request += "\n"
-    print("request len ", len(request), " data ", request)
 
     try:
         sock.sendall(request.encode("utf-8"))
@@ -126,7 +125,6 @@ def send_receive(sock, request):
     except TimeoutError:
         print('Receive time out')
         return None
-    print("Reply len ", len(reply), " data ", reply)
     reply = reply.decode("utf-8")
     return reply
 
@@ -194,26 +192,20 @@ class FluxNode:
 
         while True:
             if len(reply) > 0:
-                print("Reply ", len(reply), reply)
                 write(reply.encode("utf-8"))
 
             data = read()
-            print("Read ", len(data), data)
             if not data:
                 # No Message - Get Out
                 break
             state = self.process_message(data)
-            print("process message", state, self.request)
             if state == READY:
                 state = self.agent_action() # process agent commands
-                print("action", state)
             if state == FAILED:
                 # Something went wrong, abort
                 break
             reply = self.reply
         # When we return the connection is closed
-        print("Handle exit", state)
-
 
     def current_state(self) -> str:
         '''Returns current state of the Node Key Data'''
@@ -243,7 +235,6 @@ class FluxNode:
         try:
             self.reply = ""
             # We send our Public key and expect an AES Key for our session, if not Get Out
-            print("process", self.nkdata["State"], data)
             if self.nkdata["State"] == KEYSENT:
                 jdata = json.loads(data)
                 if jdata["State"] != AESKEY:
@@ -270,9 +261,7 @@ class FluxNode:
                 # This will be a reply to a request the Node made
                 # The user code will then issue a new request or call done
                 self.request = decrypt_aes_data(self.nkdata["AESKEY"], data)
-                print("READY request", self.request)
             if self.nkdata["State"] == PASSED:
-                print("PASSED")
                 self.nkdata["State"] = READY
                 self.request = {"State": PASSED} # Initial state, no reply, send first request
         except ValueError:
@@ -291,7 +280,6 @@ class FluxNode:
         otherwise the agent calls the user_request function to with a step number 1..n
         The default user_request function will request all files define in the bootfiles array
         '''
-        print("agent_action", self.request)
         if self.agent_response[self.request["State"]]():
             # The Received message was processed, generate the next request
             if self.user_request(self.user_request_count):
@@ -305,24 +293,24 @@ class FluxNode:
     def agent_passed(self) -> bool:
         '''Node side processing of vault replies for all predefined actions'''
         if self.request["State"] == PASSED:
-            print("Agent PASSED")
             return True
-        print("Agent PASSED Failed")
         return False
 
     def agent_data(self) -> bool:
         '''Node side processing of vault replies for all predefined actions'''
-        print("agent Data ", self.request["State"])
         if self.request["State"] == DATA:
-            with open(self.file_dir+self.request["FILE"], "w", encoding="utf-8") as file:
-                file.write(self.request["Body"])
-                file.close()
-                print("File written ", self.request["FILE"])
+            if self.request["Status"] == "Success":
+                with open(self.file_dir+self.request["FILE"], "w", encoding="utf-8") as file:
+                    file.write(self.request["Body"])
+                    file.close()
+                    print(self.request["FILE"], " received!")
+                    return True
+            if self.request["Status"] == "Match":
+                print(self.request["FILE"], " Match!")
                 return True
-        if self.request["Status"] == "Match":
-            return True
-        if self.request["Status"] == "FileNotFound":
-            return True
+            if self.request["Status"] == "FileNotFound":
+                print(self.request["FILE"], " was not found?")
+                return True
         return False
 
     def request_done(self) -> None:
@@ -344,12 +332,9 @@ class FluxNode:
 
     def user_request(self, step) -> bool:
         '''Defined by User class, if needed'''
-        print("User Request Step", step, len(self.user_files))
         if step == len(self.user_files)+1:
-            print("done sending files")
             return self.request_done()
         if step-1 in range(len(self.user_files)):
-            print("Get ", self.user_files[step-1])
             self.request_file(self.user_files[step-1])
             return True
         return False
@@ -442,7 +427,6 @@ class FluxAgent:
                 secret = file.read()
                 file.close()
             mycrc = binascii.crc32(secret.encode("utf-8"))
-            print("Check file CRC ", mycrc, crc)
             if crc == mycrc:
                 print("File ", fname, " Match!")
                 self.request["Status"] = "Match"
@@ -491,7 +475,6 @@ class FluxAgent:
             jdata["State"] = AESKEY
             data = json.dumps(jdata)
 
-            print("Send PK", jdata)
             # Send the message and wait for the reply to verify the key exchange was successful
             reply = send_receive(sock, data)
             if reply is None:
@@ -529,286 +512,3 @@ class FluxAgent:
             break
         sock.close()
         return
-
-""" def node_vault(port, appname, file_dir):
-    '''Vault runs this to poll every Flux node running their app'''
-    url = "https://api.runonflux.io/apps/location/" + appname
-    req = requests.get(url)
-    # Get the list of nodes where our app is deplolyed
-    if req.status_code == 200:
-        values = json.loads(req.text)
-        if values["status"] == "success":
-            # json looks good and status correct, iterate through node list
-            nodes = values["data"]
-            for node in nodes:
-                ipadr = node['ip'].split(':')[0]
-                print(node['name'], ipadr)
-                node_vault_ip(port, ipadr, file_dir)
-        else:
-            print("Error", req.text)
-    else:
-        print("Error", url, "Status", req.status_code)
- """
-""" class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
-    '''Define threaded server'''
-    daemon_threads = True
-    allow_reuse_address = True
-
-class NodeKeyClient(socketserver.StreamRequestHandler):
-    '''
-    ThreadedTCPServer creates a new thread and calls this function for each
-    TCP connection received
-    '''
-def handle(self):
-    '''Handle new thread that accepted a new connection'''
-    client = f'{self.client_address} on {threading.current_thread().name}'
-    print(f'Connected: {client}')
-    peer_ip = self.connection.getpeername()
-    # Create new fluxVault Object
-    vault_session = FluxNode(VAULT_NAME, peer_ip)
-    reply = vault_session.create_send_public_key()
-
-    while True:
-        if len(reply) > 0:
-            self.wfile.write(reply.encode("utf-8"))
-
-        data = self.rfile.readline()
-        if not data:
-            # No Message - Get Out
-            break
-        state = vault_session.process_message(data)
-        if state == READY:
-            state = vault_session.agent() # process agent commands
-        if state == FAILED:
-            # Something went wrong, abort
-            break
-        reply = vault_session.reply
-    print(f'Closed: {client}')
-
-def node_server(port, vaultname, bootfiles, base):
-    '''This server runs on the Node, waiting for the Vault to connect'''
-    global VAULT_NAME
-    global BOOTFILES
-    global FILE_DIR
-
-# We should Pass these to the created thread that calls NodeKeyCllient instead of using Globals
-    VAULT_NAME = vaultname
-    BOOTFILES = bootfiles
-    FILE_DIR = base
-    print("node_server ", VAULT_NAME)
-    with ThreadedTCPServer(('', port), NodeKeyClient) as server:
-        print("The NodeKeyClient server is running on port " + str(port))
-        server.serve_forever()
- """
-
-""" NODE_OPTS = ["--port", "--vault", "--dir"]
-VAULT_OPTS = ["--port", "--app", "--ip", "--dir"]
-
-def usage(argv):
-    '''Display command usage'''
-    print("Usage:")
-    print(argv[0] + " Node --port port --vault VaultDomain [--dir dirname] file1 [file2 file3 ...]")
-    print("")
-    print("Run on node with the port and Domain/IP of the Vault and the list of files")
-    print("")
-    print(argv[0] + " Vault --port port --app AppName --dir dirname")
-    print("")
-    print("Run on Vault the AppName will be used to get the list of nodes where the App is running")
-    print("The vault will connect to each node : Port and provide the files requested")
-    print("")
-    print(argv[0] + " VaultIP --port port --ip IPadr [--dir dirname]")
-    print("")
-    print("The Vault will connect to a single ip : Port to provide files")
-    print("")
-
-# Routines to check Node and Vault command line arguments
-def check_port(args, port):
-    '''check and return port number'''
-    if len(args) > 0 and args[0].lower() == "--port":
-        try:
-            port = int(args[1])
-            args.pop(0)
-            args.pop(0)
-        except ValueError:
-            print(args[1] + " invalid port number")
-            sys.exit()
-    return args, port
-
-def check_vault(args, vault):
-    '''check and return vault name/ip'''
-    if len(args) > 0 and args[0].lower() == "--vault":
-        vault = args[1]
-        args.pop(0)
-        args.pop(0)
-    return args, vault
-
-def check_dir(args, base_dir):
-    '''check and return src/dest dir'''
-    if len(args) > 0 and args[0].lower() == "--dir":
-        base_dir = args[1]
-        if base_dir.endswith("/") is False:
-            base_dir = base_dir + "/"
-        args.pop(0)
-        args.pop(0)
-    return args, base_dir
-
-def check_app(args, app_name):
-    '''check and return app name'''
-    if len(args) > 0 and args[0].lower() == "--app":
-        app_name = args[1]
-        args.pop(0)
-        args.pop(0)
-    return args, app_name
-
-def check_ip(args, ipadr):
-    '''check and return ip adr'''
-    if len(args) > 0 and args[0].lower() == "--ip":
-        ipadr = args[1]
-        args.pop(0)
-        args.pop(0)
-    return args, ipadr
-
-def check_vault_args(base_dir, myport, app_name, ipadr):
-    '''
-    The Vault requires a Port Number and either App Name or IP Address
-    If a base_dir is specified it must exist
-    '''
-    error = False
-    if len(base_dir) > 0 and os.path.isdir(base_dir) is False:
-        print(base_dir + " is not a directory or does not exist")
-        error = True
-    if myport == -1:
-        print("Port number must be specified like --port 31234")
-        error = True
-    if len(app_name) == 0 and len(ipadr) == 0:
-        print("Application Name OR IP must be set but not Both!",
-            " like: --appname myapp or --ip 2.3.45.6")
-        error = True
-    if len(app_name) > 0 and len(ipadr) > 0:
-        print("Application Name OR IP must be set but not Both!",
-            " like: --appname myapp or --ip 2.3.45.6")
-        error = True
-    return error
-
-def check_node_args(base_dir, myport, vault, files):
-    '''
-    The Node requires a Port Number, a list of files and either a Vault DNS name or IP
-    If a base_dir is specified it must exist
-    '''
-    error = False
-    if len(base_dir) > 0 and os.path.isdir(base_dir) is False:
-        print(base_dir + " is not a directory or does not exist")
-        error = True
-    if myport == -1:
-        print("Port number must be specified like --port 31234")
-        error = True
-    if len(vault) == 0:
-        print("Vault Domain or IP must be set like:",
-            " --vault 1.2.3.4 or --vault my.vault.host.io")
-        error = True
-    if len(files) == 0:
-        print("Secret files must be listed after all other arguments")
-        error = True
-    return error
-
-# The Vault client runs on a trusted server and contains private data needed by the
-#applications it is responsible for.
-#
-# Vault only connects to a single IP (--ip ipadr) from the command line or a list of
-#IPs associated with a Named Flux App specificed (--app appname) on the command line
-#
-# The Vault and Node also need to agree on which port (--port myport) the Node listens on,
-# within the Flux Application Port range (30000-39999)
-#
-# The Node also needs to know the DNS or IP Address of the Vault (--vault DNS-IP),
-# any other source will be rejected as untrusted.
-#
-# Both the Node and Vault assume files sent/received are in the current directory unless
-# --dir base_dir is set
-#
-# The Node will typically get the PORT and VAULT setting from the app Environment setting
-
-def run_node(args):
-    '''
-    Require parameters:
-
-    --port  - TCP Port number to use for contact from the Vault
-    --vault - The IP Address or DNS name of the vault
-    files   - The list of files the Node will request from the Vault
-    '''
-    files = []
-    myport = -1
-    vault = ""
-    base_dir = ""
-    error = False
-    while len(args) > 0:
-        if args[0] in NODE_OPTS:
-            args, myport = check_port(args, myport)
-            args, vault = check_vault(args, vault)
-            args, base_dir = check_dir(args, base_dir)
-        else:
-            # All recognized arguments processed, rest are considered file names
-            files = args
-            break
-    # Verify command arguments are valid
-    error = check_node_args(base_dir, myport, vault, files)
-    if error is True:
-        usage(sys.argv)
-    else:
-        node_server(myport, vault, files, base_dir)
-
-def run_vault(args):
-    '''
-    Required parameters:
-
-    --port - TCP Port number to use for contact to the Node
-    --app  - Flux Application name - Required if --ip is not specified
-    --ip   - IP Address of Application - Required if --app is not specified
-            The IP does not need to be a Flux Node, for testing eg localhost, etc
-    '''
-    myport = -1
-    base_dir = ""
-    ipadr = ""
-    app_name = ""
-    error = False
-    while len(args) > 0:
-        if args[0] in VAULT_OPTS:
-            args, myport = check_port(args, myport)
-            args, app_name = check_app(args, app_name)
-            args, ipadr = check_ip(args, ipadr)
-            args, base_dir = check_dir(args, base_dir)
-        else:
-            print("Unknown option: ", args[0])
-            args.pop(0)
-    # Verify command arguments are valid
-    error = check_vault_args(base_dir, myport, app_name, ipadr)
-    if error is True:
-        usage(sys.argv)
-    else:
-        # Are we checking an app or single IP?
-        if len(app_name) > 0:
-            node_vault(myport, app_name, base_dir)
-        else:
-            node_vault_ip(myport, ipadr, base_dir)
-
-def main():
-    '''
-    Main function
-    This file defines two programs
-    Node - a server process that runs inside a container
-    Vault - a client process that periodically (cron?) connects to each Node app
-    '''
-    args = []
-
-    if sys.argv[1].upper() == "NODE":
-        args = sys.argv[2:]
-        run_node(args)
-        sys.exit()
-
-    if sys.argv[1].upper() == "VAULT":
-        args = sys.argv[2:]
-        run_vault(args)
-        sys.exit()
-
-main()
- """

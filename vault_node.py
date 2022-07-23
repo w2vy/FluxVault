@@ -16,11 +16,6 @@ class MyFluxNode(vault.FluxNode):
     vault_name = VAULT_NAME
     user_files = BOOTFILES
     file_dir = FILE_DIR
-    print("MyFluxNode class create")
-    def __init__(self) -> None:
-        super().__init__()
-        print("MyFluxNode create instance")
-
 
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     '''Define threaded server'''
@@ -33,11 +28,6 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
     TCP connection received
     '''
     node = MyFluxNode()
-    print("NodeKeyClient class")
-#    def __init__(self, request, client_address, server) -> None:
-#        super().__init__(request, client_address, server)
-#       self.node = MyFluxNode()
-#        print("NodeKeyClient create")
 
     def handle(self):
         '''Handle new thread that accepted a new connection'''
