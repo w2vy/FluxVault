@@ -344,41 +344,37 @@ def open_connection(port, appip):
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     except socket.error:
-        print('Failed to create socket')
-        return None
+        return 'Failed to create socket'
 
     try:
         remote_ip = socket.gethostbyname( appip )
     except socket.gaierror:
-        print('Hostname could not be resolved')
-        return None
+        return 'Hostname could not be resolved'
 
     # Set short timeout
     sock.settimeout(30)
 
     # Connect to remote server
     try:
+        error = None
         print('# Connecting to server, ' + appip + ' (' + remote_ip + ')')
         sock.connect((remote_ip , port))
     except ConnectionRefusedError:
-        print(appip, "connection refused")
+        error = appip + "connection refused"
         sock.close()
         sock = None
     except TimeoutError:
-        print(appip, "Connect TimeoutError")
+        error = appip + "Connect TimeoutError"
         sock.close()
         sock = None
     except socket.error:
-        print(appip, "No route to host")
+        error = appip + "No route to host"
         sock.close()
         sock = None
-#    except socket.timeout:
-#        print(appip, "Connect timed out")
-#        sock.close()
-#        sock = None
 
     if sock is None:
-        return None
+        print(error)
+        return error
 
     sock.settimeout(None)
     # Set longer timeout
@@ -393,6 +389,7 @@ class FluxAgent:
         self.agent_requests = {}
         self.file_dir = ""
         self.vault_port = 0
+        self.result = "Initialized"
         self.initialize()
 
     def initialize(self) -> None:
@@ -447,14 +444,17 @@ class FluxAgent:
         '''
 
         if self.vault_port == 0:
-            print("vault_port Not set!")
+            self.result = "vault_port Not set!"
+            print(self.result)
             return
         # Open socket to the node
         sock = open_connection(self.vault_port, appip)
-        if sock is None:
+        if sock is str:
+            self.result = sock
             print('Could not create socket')
             return
 
+        self.result = "Connected"
         # Use While loop to allow graceful escape on error
         while True:
             # Node will generate a RSA Public/Private key pair and send us the Public Key
@@ -463,6 +463,7 @@ class FluxAgent:
 
             public_key = receive_public_key(sock)
             if public_key is None:
+                self.result = "No Public Key Received"
                 break
 
             # Generate and send AES Key encrypted with PublicKey just received
@@ -477,19 +478,23 @@ class FluxAgent:
             # Send the message and wait for the reply to verify the key exchange was successful
             reply = send_receive(sock, data)
             if reply is None:
-                print('Receive Time out')
+                self.result = 'Receive Time out'
+                print(self.result)
                 break
             # AES Encryption should be started now, decrypt the message and validate the reply
             jdata = decrypt_aes_data(aeskey, reply)
             if jdata["State"] != STARTAES:
-                print("StartAES not found")
+                self.result = "StartAES not found"
+                print(self.result)
                 break
             if jdata["Text"] != "Test":
-                print("StartAES Failed")
+                self.result = "StartAES Failed"
+                print(self.result)
                 break
             # Form and format looks good, prepare reply and indicate we Passed
             jdata["Text"] = "Passed"
 
+            self.result = "Connected and Encrypted"
             # This function will send the reply and process any file requests it receives
             # The rest of the session will use the aeskey to protect the session
             #send_files(sock, jdata, aeskey, file_dir)
@@ -498,7 +503,8 @@ class FluxAgent:
                 data = encrypt_aes_data(aeskey, jdata)
                 reply = send_receive(sock, data)
                 if reply is None:
-                    print('Receive Time out')
+                    self.result = 'Receive Time out'
+                    print(self.result)
                     break
                 # Reply sent and next command received, decrypt and process
                 self.request = decrypt_aes_data(aeskey, reply)
@@ -507,6 +513,7 @@ class FluxAgent:
                 if jdata is None:
                     break
                 if jdata["State"] == DONE:
+                    self.result = "Completed"
                     break
             break
         sock.close()

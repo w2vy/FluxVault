@@ -33,6 +33,7 @@ def node_vault():
                 ipadr = node['ip'].split(':')[0]
                 print(node['name'], ipadr)
                 agent.node_vault_ip(ipadr)
+                print(node['name'], ipadr, agent.result)
         else:
             print("Error", req.text)
     else:
@@ -44,6 +45,7 @@ if __name__ == "__main__":
             ipaddr = sys.argv[2]
             one_node = MyFluxAgent()
             one_node.node_vault_ip(ipaddr)
+            print(ipaddr, one_node.result)
             sys.exit(0)
         else:
             print("Missing Node IP Address: --ip ipaddress")
