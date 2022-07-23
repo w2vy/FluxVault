@@ -6,7 +6,7 @@ import requests
 import vault
 
 VAULT_NAME = "localhost"                    # EDIT ME
-FILE_DIR = "./files"                        # EDIT ME
+FILE_DIR = "./files/"                       # EDIT ME
 VAULT_PORT = 39898                          # EDIT ME
 APP_NAME = "demo"                           # EDIT ME
 

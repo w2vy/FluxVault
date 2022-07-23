@@ -8,7 +8,7 @@ import vault
 
 VAULT_NAME = "localhost"                    # EDIT ME
 BOOTFILES = ["quotes.txt", "readme.txt"]    # EDIT ME
-FILE_DIR = "/tmp/node"                      # EDIT ME
+FILE_DIR = "/tmp/node/"                     # EDIT ME
 VAULT_PORT = 39898                          # EDIT ME
 
 class MyFluxNode(vault.FluxNode):

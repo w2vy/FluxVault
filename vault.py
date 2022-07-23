@@ -76,14 +76,17 @@ def decrypt_aes_data(key, data):
     Accept out cipher text object
     Decrypt data with AES key
     '''
-    jdata = json.loads(data)
-    nonce = bytes.fromhex(jdata["nonce"])
-    tag = bytes.fromhex(jdata["tag"])
-    ciphertext = bytes.fromhex(jdata["ciphertext"])
+    try:
+        jdata = json.loads(data)
+        nonce = bytes.fromhex(jdata["nonce"])
+        tag = bytes.fromhex(jdata["tag"])
+        ciphertext = bytes.fromhex(jdata["ciphertext"])
 
-    # let's assume that the key is somehow available again
-    cipher = AES.new(key, AES.MODE_EAX, nonce)
-    msg = cipher.decrypt_and_verify(ciphertext, tag)
+        # let's assume that the key is somehow available again
+        cipher = AES.new(key, AES.MODE_EAX, nonce)
+        msg = cipher.decrypt_and_verify(ciphertext, tag)
+    except:
+        return { "State": FAILED}
     return json.loads(msg)
 
 def encrypt_aes_data(key, message):
@@ -288,7 +291,7 @@ class FluxNode:
         otherwise the agent calls the user_request function to with a step number 1..n
         The default user_request function will request all files define in the bootfiles array
         '''
-        print("request", self.request)
+        print("agent_action", self.request)
         if self.agent_response[self.request["State"]]():
             # The Received message was processed, generate the next request
             if self.user_request(self.user_request_count):
@@ -309,10 +312,12 @@ class FluxNode:
 
     def agent_data(self) -> bool:
         '''Node side processing of vault replies for all predefined actions'''
+        print("agent Data ", self.request["State"])
         if self.request["State"] == DATA:
             with open(self.file_dir+self.request["FILE"], "w", encoding="utf-8") as file:
                 file.write(self.request["Body"])
                 file.close()
+                print("File written ", self.request["FILE"])
                 return True
         if self.request["Status"] == "Match":
             return True
@@ -323,11 +328,12 @@ class FluxNode:
     def request_done(self) -> None:
         '''Tell vault we are done'''
         self.request = { "State": DONE }
+        return True
 
     def request_file(self, fname) -> None:
         '''Open the file and compute the crc, set crc=0 if not found'''
         try:
-            with open(FILE_DIR+fname, encoding="utf-8") as file:
+            with open(self.file_dir+fname, encoding="utf-8") as file:
                 content = file.read()
                 file.close()
             crc = binascii.crc32(content.encode("utf-8"))
@@ -338,8 +344,12 @@ class FluxNode:
 
     def user_request(self, step) -> bool:
         '''Defined by User class, if needed'''
-        print("User Request")
-        if step in range(1, len(self.user_files)):
+        print("User Request Step", step, len(self.user_files))
+        if step == len(self.user_files)+1:
+            print("done sending files")
+            return self.request_done()
+        if step-1 in range(len(self.user_files)):
+            print("Get ", self.user_files[step-1])
             self.request_file(self.user_files[step-1])
             return True
         return False
@@ -411,7 +421,7 @@ class FluxAgent:
         node_func = self.agent_requests.get(self.request["State"], None)
         if node_func is None:
             return None
-        jdata = node_func(self)
+        jdata = node_func()
         return jdata
 
     def node_done(self):
@@ -432,6 +442,7 @@ class FluxAgent:
                 secret = file.read()
                 file.close()
             mycrc = binascii.crc32(secret.encode("utf-8"))
+            print("Check file CRC ", mycrc, crc)
             if crc == mycrc:
                 print("File ", fname, " Match!")
                 self.request["Status"] = "Match"
@@ -471,7 +482,6 @@ class FluxAgent:
             if public_key is None:
                 break
 
-            print("Public Key", public_key)
             # Generate and send AES Key encrypted with PublicKey just received
             # These are only used for this session and are memory resident
             aeskey = get_random_bytes(16).hex().encode("utf-8")
