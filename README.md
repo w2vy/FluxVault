@@ -98,6 +98,19 @@ and then contact new nodes right away and other nodes at a slower rate.
 The vault_node.py code uses a python ThreadedServer to wait for connections, a custom implementation could do something totally
 different, possibly adding the calls to an existing application.
 
+# Customization
+
+The sequence of defines actions is as follows:
+
+1) The Agent connects to a Node and sets up a secure connection
+2) The Node runs FluxNode.agent_action which processes any response from the Agent and then calls FluxNode.user_request
+3) FluxNode.user_request gets called with a step counter and the custom code can invoke FluxNode.request_file or any request function added in MyFluxNode
+4) The request function formatted and encrypted a request that is sent to the Agent
+5) The Agent receives the request and uses the 'State' field of the message to lookup the function to handle the request
+6) The function can be FluxAgent.node_request or any function defined in MyFluxAgent and added to MyFluxAgent.agent_action
+7) The agent_action function processes the request and sends the response to the Node which brings us back to #2 above
+8) When the Node has completed all the requests, it sends the 'DONE' action which will signal the Agent to disconnect
+
 # TODO
 
 - Write code to periodically poll FluxOs for a list of nodes and see if aany need config

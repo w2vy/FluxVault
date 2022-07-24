@@ -278,6 +278,7 @@ class FluxNode:
         If the none of the agent functions do not handle the request we abort the connection,
         otherwise the agent calls the user_request function to with a step number 1..n
         The default user_request function will request all files define in the bootfiles array
+        The MyFluxNode class (example in vault_node.py) can redefine teh user_request function
         '''
         if self.agent_response[self.request["State"]]():
             # The Received message was processed, generate the next request
@@ -390,10 +391,6 @@ class FluxAgent:
         self.file_dir = ""
         self.vault_port = 0
         self.result = "Initialized"
-        self.initialize()
-
-    def initialize(self) -> None:
-        '''Define in User Class to set global options'''
         self.agent_requests[DONE] = self.node_done
         self.agent_requests[REQUEST] = self.node_request
 
