@@ -40,8 +40,11 @@ def node_vault():
         print("Error", url, "Status", req.status_code)
 
 if __name__ == "__main__":
+    if len(sys.argv) == 1:
+        node_vault()
+        sys.exit(0)
     if sys.argv[1].lower() == "--ip":
-        if len(sys.argv[2]) > 0:
+        if len(sys.argv) > 2:
             ipaddr = sys.argv[2]
             one_node = MyFluxAgent()
             one_node.node_vault_ip(ipaddr)
@@ -49,11 +52,7 @@ if __name__ == "__main__":
             sys.exit(0)
         else:
             print("Missing Node IP Address: --ip ipaddress")
-    if len(sys.argv[1]) == 0:
-        node_vault()
-        sys.exit(0)
-    else:
-        print("Incorrect arguments:")
-        print("With no arguments all nodes running ", APP_NAME, " will be polled")
-        print("If you specify '--ip ipaddress' then that ipaddress will be polled")
-        sys.exit(1)
+    print("Incorrect arguments:")
+    print("With no arguments all nodes running ", APP_NAME, " will be polled")
+    print("If you specify '--ip ipaddress' then that ipaddress will be polled")
+    sys.exit(1)

@@ -360,15 +360,15 @@ def open_connection(port, appip):
         print('# Connecting to server, ' + appip + ' (' + remote_ip + ')')
         sock.connect((remote_ip , port))
     except ConnectionRefusedError:
-        error = appip + "connection refused"
+        error = appip + " connection refused"
         sock.close()
         sock = None
     except TimeoutError:
-        error = appip + "Connect TimeoutError"
+        error = appip + " Connect TimeoutError"
         sock.close()
         sock = None
     except socket.error:
-        error = appip + "No route to host"
+        error = appip + " No route to host"
         sock.close()
         sock = None
 
@@ -449,7 +449,7 @@ class FluxAgent:
             return
         # Open socket to the node
         sock = open_connection(self.vault_port, appip)
-        if sock is str:
+        if isinstance(sock, str):
             self.result = sock
             print('Could not create socket')
             return
