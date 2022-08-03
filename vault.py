@@ -8,7 +8,6 @@ from Crypto.PublicKey import RSA
 from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES, PKCS1_OAEP
 
-# pylint: disable=W0603
 VAULT_NAME = ""
 BOOTFILES = []
 FILE_DIR = ""

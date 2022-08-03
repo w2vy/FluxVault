@@ -1,7 +1,7 @@
 # FluxVault
 Flux Vault - load private data into running docker
 
-The goal of this is to provide a way to securely load passwords on a running FLux Docker
+The goal of this is to provide a way to securely load passwords on a running Flux Docker
 
 vault.py defines two Classes FluxAgent and FluxNode an application can create a custom class
 which will allow configurating and also expanding the functionality.
@@ -67,27 +67,64 @@ pip3 install pycryptodome
 
 The rest are standard python libraries
 
-If running on Ubuntu 20.04 you will need to install Python 3
+# Installation
+
+Both Ubuntu Desktop 20.04 and 22.04 have python3 preinstalled.
+Installing pycryptodome needs pip3 also installed which can be done with this command:
+
+sudo apt install python3-pip
+
+You can then run
+
+pip3 install pycryptodome
+
+You will likely need git to checkout the code (required to run the demo)
+
+sudo apt install git
+git clone https://github.com/RunOnFlux/FluxVault.git
+
+In production, in a Docker build you could also use wget since the library is a single file.
+
+wget https://raw.githubusercontent.com/RunOnFlux/FluxVault/main/vault.py
+
+Windows
 
 TODO
 
-If running on Ubuntu 22.04 you will need:
+Flux Node
+
+Typically the Agent will be running on a Desktop and the Node will be on a Flux Node.
+You will need to include the code in your docker image
+
+In application I used alpine:3.15 and the command to add python3 to docker are
+
+# Python
+ENV PYTHONUNBUFFERED=1
+RUN apk add --update --no-cache python3 && ln -sf python3 /usr/bin/python
+RUN python3 -m ensurepip
+RUN pip3 install --no-cache --upgrade pip setuptools
+RUN apk add gcc g++ make libffi-dev openssl-dev git
+RUN pip3 install pycryptodome
+RUN pip3 install requests
+
 
 TODO
 
 So far the code has only been run on Ubuntu systems, it should easily run under WSL.
 Python is very portable, there should not be any reason it would not run on Windowsof Mac directly.
 
-# Usage
+# Demo
 
 There are two demo files vault_agent.py and vault_node.py that can be used to demonstrate the sending of secrets.
 
 1) Clone the repo to a local directory
 2) Open two terminal windows in that same location
 3) Create a temp folder: "mkdir /tmp/node" This is where files will be written/updated
-4) Inspect the two scripts, they have a MyFluxNode/MyFluxAgent class that defines all the configuration
+4) Inspect the two scripts, they have a MyFluxNode/MyFluxAgent class that defines all the configuration for the demo ("EDIT ME")
 5) In one terminal start the Node server "python3 ./vault_node.py" This starts a server that does not exit.
 6) In the other terminal run the Agent "python3 ./vault_agent --ip 127.0.0.1" The Agent will contact the Node at the IP given
+
+If you edit or delete one of the files in /tmp/node and re-run vault_agent the file will be re-sent.
 
 The Agent will run once and exit, if the --ip is left off then the vault_agent.py code looks for named Flux Application
 and contacts the Node server running on each active instance of the named application.
@@ -97,6 +134,30 @@ and then contact new nodes right away and other nodes at a slower rate.
 
 The vault_node.py code uses a python ThreadedServer to wait for connections, a custom implementation could do something totally
 different, possibly adding the calls to an existing application.
+
+## Result Output
+
+The output of vault_node.py will look like this:
+
+tom@mini1:~/FluxVault$ ./vault_node.py 
+Running in Demo Mode files will be placed in  /tmp/node/
+Warning  /tmp/node/  exists
+node_server  localhost
+The NodeKeyClient server is running on port 39898
+Connected: ('127.0.0.1', 58910) on Thread-1
+quotes.txt  received!
+readme.txt  received!
+Closed: ('127.0.0.1', 58910) on Thread-1
+
+The output of vault_agent.py will look like this:
+
+tom@mini1:~/FluxVault$ ./vault_agent.py --ip 127.0.0.1
+ Connecting to server, 127.0.0.1 (127.0.0.1)
+File  quotes.txt  sent!
+File  readme.txt  sent!
+127.0.0.1 Completed
+tom@mini1:~/FluxVault$ 
+
 
 # Customization
 
