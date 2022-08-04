@@ -4,14 +4,14 @@ import socketserver
 import threading
 import os
 import sys
-import vault
+from fluxvault import FluxNode
 
 VAULT_NAME = "localhost"                    # EDIT ME
 BOOTFILES = ["quotes.txt", "readme.txt"]    # EDIT ME
 FILE_DIR = "/tmp/node/"                     # EDIT ME
 VAULT_PORT = 39898                          # EDIT ME
 
-class MyFluxNode(vault.FluxNode):
+class MyFluxNode(FluxNode):
     '''User class to allow easy congiguration, edit lines above  at EDIT ME'''
     vault_name = VAULT_NAME
     user_files = BOOTFILES

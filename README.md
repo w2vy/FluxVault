@@ -59,7 +59,6 @@ It uses the following python libraries
 - import sys
 - import os
 - import time
-- import requests
 
 Crypto is obtained from the pycryptodome library, installed with 
 
@@ -83,9 +82,11 @@ You will likely need git to checkout the code (required to run the demo)
 sudo apt install git
 git clone https://github.com/RunOnFlux/FluxVault.git
 
-In production, in a Docker build you could also use wget since the library is a single file.
+Install python library
 
-wget https://raw.githubusercontent.com/RunOnFlux/FluxVault/main/vault.py
+pip3 install ./FluxVault
+
+(When beta testing is comlete this library will be deployed as a python package and installed with 'pip3 install fluxvault')
 
 Windows
 

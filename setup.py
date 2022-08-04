@@ -1,4 +1,4 @@
-from distutils.core import setup
+from setuptools import setup
 
 setup(name='fluxvault',
       version='1.0',
@@ -9,4 +9,5 @@ setup(name='fluxvault',
       author_email='tom@moulton.us',
       url='https://github.com/RunOnFlux/FluxVault.git',
       packages=['fluxvault'],
+      install_requires=['pycryptodome'] #external packages as dependencies
 )

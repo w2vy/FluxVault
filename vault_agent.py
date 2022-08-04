@@ -2,15 +2,14 @@
 '''This module is a single file that supports the loading of secrets into a Flux Node'''
 import json
 import sys
-import requests
-import vault
+from fluxvault import FluxAgent
 
 VAULT_NAME = "localhost"                    # EDIT ME
 FILE_DIR = "./files/"                       # EDIT ME
 VAULT_PORT = 39898                          # EDIT ME
 APP_NAME = "demo"                           # EDIT ME
 
-class MyFluxAgent(vault.FluxAgent):
+class MyFluxAgent(FluxAgent):
     '''User class to allow easy configuration, see EDIT ME above'''
     def __init__(self) -> None:
         super().__init__()
