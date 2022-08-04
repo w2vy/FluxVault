@@ -1,9 +1,10 @@
+'''setup fluxvault package'''
 from setuptools import setup
 
 setup(name='fluxvault',
       version='1.0',
       description='Flux Vault Node Agent',
-      long_description='Flux Vault a distributed agent to load secrets into a Flux App or handle other secure activities',
+      long_description='Flux Vault a distributed agent to load secrets into a Flux App',
       license="MIT",
       author='Tom Moulton',
       author_email='tom@moulton.us',

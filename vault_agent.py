@@ -2,6 +2,7 @@
 '''This module is a single file that supports the loading of secrets into a Flux Node'''
 import json
 import sys
+import requests
 from fluxvault import FluxAgent
 
 VAULT_NAME = "localhost"                    # EDIT ME
