@@ -1,7 +1,6 @@
 '''This module is a single file that supports the loading of secrets into a Flux Node'''
 import binascii
 import json
-from pickle import TRUE
 import sys
 import time
 from datetime import datetime
@@ -176,7 +175,7 @@ class FluxNode:
         hname = self.vault_name
         try:
             result = socket.gethostbyname(hname)
-        except:
+        except socket.gaierror:
             print("Vault name not vaild DNS ", hname)
             return False
         if peer_ip[0] != result:
@@ -386,22 +385,22 @@ def open_connection(port, appip):
 
 class FluxAgent:
     '''Class for the Secure Vault Agent, runs on secured trusted server or PC behind firewall'''
+# pylint: disable=too-many-instance-attributes
     def __init__(self) -> None:
         # super(fluxVault, self).__init__()
         self.request = {}
-        self.agent_requests = {}
         self.file_dir = ""
         self.vault_port = 0
         self.result = "Initialized"
-        self.agent_requests[DONE] = self.node_done
-        self.agent_requests[REQUEST] = self.node_request
+        self.agent_requests = {DONE: self.node_done, REQUEST: self.node_request}
         self.log = []
         self.verbose = False
+        self.matched = False
 
     def add_log(self, msg):
         '''Add logging of notable events'''
-        dt = datetime.now()
-        now = dt.strftime("%b-%d-%Y %H:%M:%S ")
+        cur_time = datetime.now()
+        now = cur_time.strftime("%b-%d-%Y %H:%M:%S ")
         self.log.append(now+msg)
         if self.verbose:
             print(now+msg)
@@ -448,6 +447,29 @@ class FluxAgent:
             self.request["Status"] = "FileNotFound"
             self.matched = False
         return self.request
+
+    def do_encrypted(self, sock, aeskey, jdata):
+        '''
+        This function will send the reply and process any file requests it receives
+        The rest of the session will use the aeskey to protect the session
+        send_files(sock, jdata, aeskey, file_dir)'''
+        while True:
+            # Encrypt the latest reply
+            data = encrypt_aes_data(aeskey, jdata)
+            reply = send_receive(sock, data)
+            if reply is None:
+                self.result = 'Receive Time out'
+                self.add_log(self.result)
+                break
+            # Reply sent and next command received, decrypt and process
+            self.request = decrypt_aes_data(aeskey, reply)
+            # call vault_agent functions
+            jdata = self.vault_agent()
+            if jdata is None:
+                break
+            if jdata["State"] == DONE:
+                self.result = "Completed"
+                break
 
     def node_vault_ip(self, appip):
         '''
@@ -510,26 +532,6 @@ class FluxAgent:
             jdata["Text"] = "Passed"
 
             self.result = "Connected and Encrypted"
-            # This function will send the reply and process any file requests it receives
-            # The rest of the session will use the aeskey to protect the session
-            #send_files(sock, jdata, aeskey, file_dir)
-            while True:
-                # Encrypt the latest reply
-                data = encrypt_aes_data(aeskey, jdata)
-                reply = send_receive(sock, data)
-                if reply is None:
-                    self.result = 'Receive Time out'
-                    self.add_log(self.result)
-                    break
-                # Reply sent and next command received, decrypt and process
-                self.request = decrypt_aes_data(aeskey, reply)
-                # call vault_agent functions
-                jdata = self.vault_agent()
-                if jdata is None:
-                    break
-                if jdata["State"] == DONE:
-                    self.result = "Completed"
-                    break
-            break
+            self.do_encrypted(sock, aeskey, jdata)
         sock.close()
         return
