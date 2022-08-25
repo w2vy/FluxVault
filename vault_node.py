@@ -4,7 +4,6 @@ import socketserver
 import threading
 import time
 import os
-import sys
 from fluxvault import FluxNode
 
 VAULT_NAME = "localhost"                    # EDIT ME
