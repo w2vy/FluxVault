@@ -2,6 +2,7 @@
 '''This module is a single file that supports the loading of secrets into a Flux Node'''
 import socketserver
 import threading
+import time
 import os
 import sys
 from fluxvault import FluxNode
@@ -49,16 +50,17 @@ def node_server():
         server.serve_forever()
 
 if __name__ == '__main__':
-    if VAULT_NAME == "localhost" and VAULT_PORT == 39898:
-        print("Running in Demo Mode files will be placed in ", FILE_DIR)
+    while True:
+        if VAULT_NAME == "localhost" and VAULT_PORT == 39898:
+            print("Running in Demo Mode files will be placed in ", FILE_DIR)
         if os.path.isdir(FILE_DIR):
-            print("Warning ", FILE_DIR, " exists")
+            print(FILE_DIR, " exists")
         else:
             print("Creating ", FILE_DIR)
             os.makedirs(FILE_DIR)
-    if os.path.exists(FILE_DIR):
-        node_server()
-        sys.exit(0)
-    else:
-        print(FILE_DIR, " does not exist!")
-        sys.exit(1)
+        if os.path.exists(FILE_DIR):
+            node_server()
+        else:
+            print(FILE_DIR, " does not exist!")
+            time.sleep(60)
+        print("********************* node_server Exited!!!! Restarting ***********************")

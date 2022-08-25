@@ -127,13 +127,17 @@ def send_receive(sock, request):
     reply = reply.decode("utf-8")
     return reply
 
+# pylint: disable=W0702
 def receive_only(sock):
     '''
     Wait for a message from our peer
     '''
     # Receive data
-    reply = sock.recv(MAX_MESSAGE)
-    reply = reply.decode("utf-8")
+    try:
+        reply = sock.recv(MAX_MESSAGE)
+        reply = reply.decode("utf-8")
+    except:
+        reply = ""
     return reply
 
 def receive_public_key(sock):
