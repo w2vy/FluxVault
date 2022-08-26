@@ -537,5 +537,6 @@ class FluxAgent:
 
             self.result = "Connected and Encrypted"
             self.do_encrypted(sock, aeskey, jdata)
+            break
         sock.close()
         return
