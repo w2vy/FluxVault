@@ -29,7 +29,7 @@ The communication flow is as follows:
 
 1. Agent connects to Node on a predefined Application port.
 2. The Node will generate a RSA Key Pair and send the Public Key to the Agent.
-3. The Agent will use that Public Key to encrypt a message that contains and AES Key
+3. The Agent will use that Public Key to encrypt a message that contains an AES Key
 4. The Node will send a test message using the provided AES Key to the Agent
 5. If the Agent suceesfully decrypts the message it sends a Test Passed message, also encrypted.
    (All further messages are encrypted with this AES Key)
@@ -86,7 +86,7 @@ Install python library
 
 pip3 install ./FluxVault
 
-(When beta testing is comlete this library will be deployed as a python package and installed with 'pip3 install fluxvault')
+(When beta testing is complete this library will be deployed as a python package and installed with 'pip3 install fluxvault')
 
 Windows
 
@@ -112,7 +112,7 @@ RUN pip3 install requests
 TODO
 
 So far the code has only been run on Ubuntu systems, it should easily run under WSL.
-Python is very portable, there should not be any reason it would not run on Windowsof Mac directly.
+Python is very portable, there should not be any reason it would not run on Windows or Mac directly.
 
 # Demo
 

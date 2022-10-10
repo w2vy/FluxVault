@@ -2,14 +2,17 @@
 '''This module is a single file that supports the loading of secrets into a Flux Node'''
 import json
 import sys
-import os
 import requests
+import os
 from fluxvault import FluxAgent
+from datetime import datetime
 
 VAULT_NAME = os.getenv('VAULT_NAME')      # EDIT ME
 VAULT_PORT = os.getenv('VAULT_PORT')      # EDIT ME
-APP_NAME = os.getenv('VAULT_PORT')        # EDIT ME
+APP_NAME = os.getenv('VAULT_APP')         # EDIT ME
 FILE_DIR = os.getenv('VAULT_FILE_DIR')    # EDIT ME
+
+VERBOSE = False
 
 if VAULT_NAME == None:
     VAULT_NAME = 'localhost'
@@ -17,6 +20,8 @@ if VAULT_PORT == None:
     VAULT_PORT = 39898
 else:
     VAULT_PORT = int(VAULT_PORT)
+if APP_NAME == None:
+    APP_NAME = 'vault_demo'
 if FILE_DIR == None:
     FILE_DIR = './files/'
 
@@ -25,25 +30,27 @@ class MyFluxAgent(FluxAgent):
     def __init__(self) -> None:
         super().__init__()
         self.vault_name = VAULT_NAME
-        self.vault_port = VAULT_PORT
         self.file_dir = FILE_DIR
+        self.vault_port = VAULT_PORT
+        self.verbose = VERBOSE
 
 def node_vault():
     '''Vault runs this to poll every Flux node running their app'''
     url = "https://api.runonflux.io/apps/location/" + APP_NAME
-    req = requests.get(url)
+    req = requests.get(url, timeout=10)
     # Get the list of nodes where our app is deplolyed
     if req.status_code == 200:
         values = json.loads(req.text)
         if values["status"] == "success":
             # json looks good and status correct, iterate through node list
             nodes = values["data"]
-            for node in nodes:
+
+            for this_node in nodes:
                 agent = MyFluxAgent() # Each connection to a node get a fresh agent
-                ipadr = node['ip'].split(':')[0]
-                print(node['name'], ipadr)
+                ipadr = this_node['ip'].split(':')[0]
+                if VERBOSE:
+                    print(this_node['name'], ipadr)
                 agent.node_vault_ip(ipadr)
-                print(node['name'], ipadr, agent.result)
         else:
             print("Error", req.text)
     else:

@@ -4,12 +4,14 @@ import socketserver
 import threading
 import time
 import os
+import sys
 from fluxvault import FluxNode
+
+BOOTFILES = ["quotes.txt", "readme.txt"]    # EDIT ME
 
 VAULT_NAME = os.getenv('VAULT_NAME')        # EDIT ME
 VAULT_PORT = os.getenv('VAULT_PORT')        # EDIT ME
 FILE_DIR = os.getenv('VAULT_FILE_DIR')      # EDIT ME
-BOOTFILES = ["quotes.txt", "readme.txt"]    # EDIT ME
 
 if VAULT_NAME == None:
     VAULT_NAME = 'localhost'
@@ -59,10 +61,10 @@ def node_server():
 
 if __name__ == '__main__':
     while True:
-        if VAULT_NAME == "localhost" and VAULT_PORT == 39898:
+        if VAULT_NAME == "localhost" and VAULT_PORT == 39289:
             print("Running in Demo Mode files will be placed in ", FILE_DIR)
         if os.path.isdir(FILE_DIR):
-            print(FILE_DIR, " exists")
+            print("Warning ", FILE_DIR, " exists")
         else:
             print("Creating ", FILE_DIR)
             os.makedirs(FILE_DIR)
