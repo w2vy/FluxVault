@@ -7,17 +7,17 @@ import requests
 from fluxvault import FluxAgent
 
 VAULT_NAME = os.getenv('VAULT_NAME')      # EDIT ME
-VAULT_PORT = os.getenv('VAULT_PORT')      # EDIT ME
-APP_NAME = os.getenv('VAULT_PORT')        # EDIT ME
+VAULT_OPORT = os.getenv('VAULT_PORT')      # EDIT ME
+APP_NAME = os.getenv('VAULT_APP')        # EDIT ME
 FILE_DIR = os.getenv('VAULT_FILE_DIR')    # EDIT ME
 
-if VAULT_NAME == None:
+if VAULT_NAME is None:
     VAULT_NAME = 'localhost'
-if VAULT_PORT == None:
-    VAULT_PORT = 39898
+if VAULT_OPORT is None:
+    VAULT_OPORT = 39898
 else:
-    VAULT_PORT = int(VAULT_PORT)
-if FILE_DIR == None:
+    VAULT_OPORT = int(VAULT_OPORT)
+if FILE_DIR is None:
     FILE_DIR = './files/'
 
 class MyFluxAgent(FluxAgent):
@@ -25,13 +25,13 @@ class MyFluxAgent(FluxAgent):
     def __init__(self) -> None:
         super().__init__()
         self.vault_name = VAULT_NAME
-        self.vault_port = VAULT_PORT
+        self.vault_port = VAULT_OPORT
         self.file_dir = FILE_DIR
 
 def node_vault():
     '''Vault runs this to poll every Flux node running their app'''
     url = "https://api.runonflux.io/apps/location/" + APP_NAME
-    req = requests.get(url)
+    req = requests.get(url, 30)
     # Get the list of nodes where our app is deplolyed
     if req.status_code == 200:
         values = json.loads(req.text)

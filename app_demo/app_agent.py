@@ -2,27 +2,26 @@
 '''This module is a single file that supports the loading of secrets into a Flux Node'''
 import json
 import sys
-import requests
 import os
+import requests
 from fluxvault import FluxAgent
-from datetime import datetime
 
 VAULT_NAME = os.getenv('VAULT_NAME')      # EDIT ME
-VAULT_PORT = os.getenv('VAULT_PORT')      # EDIT ME
+VAULT_OPORT = os.getenv('VAULT_PORT')      # EDIT ME
 APP_NAME = os.getenv('VAULT_APP')         # EDIT ME
 FILE_DIR = os.getenv('VAULT_FILE_DIR')    # EDIT ME
 
-VERBOSE = False
+VERBOSE = True
 
-if VAULT_NAME == None:
+if VAULT_NAME is None:
     VAULT_NAME = 'localhost'
-if VAULT_PORT == None:
-    VAULT_PORT = 39898
+if VAULT_OPORT is None:
+    VAULT_OPORT = 39898
 else:
-    VAULT_PORT = int(VAULT_PORT)
-if APP_NAME == None:
-    APP_NAME = 'vault_demo'
-if FILE_DIR == None:
+    VAULT_OPORT = int(VAULT_OPORT)
+if APP_NAME is None:
+    APP_NAME = 'VaultDemo'
+if FILE_DIR is None:
     FILE_DIR = './files/'
 
 class MyFluxAgent(FluxAgent):
@@ -31,7 +30,7 @@ class MyFluxAgent(FluxAgent):
         super().__init__()
         self.vault_name = VAULT_NAME
         self.file_dir = FILE_DIR
-        self.vault_port = VAULT_PORT
+        self.vault_port = VAULT_OPORT
         self.verbose = VERBOSE
 
 def node_vault():
@@ -62,10 +61,10 @@ if __name__ == "__main__":
         sys.exit(0)
     if sys.argv[1].lower() == "--ip":
         if len(sys.argv) > 2:
-            ipaddr = sys.argv[2]
+            IPADR = sys.argv[2]
             one_node = MyFluxAgent()
-            one_node.node_vault_ip(ipaddr)
-            print(ipaddr, one_node.result)
+            one_node.node_vault_ip(IPADR)
+            print(IPADR, one_node.result)
             sys.exit(0)
         else:
             print("Missing Node IP Address: --ip ipaddress")

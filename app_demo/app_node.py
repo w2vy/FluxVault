@@ -4,27 +4,26 @@ import socketserver
 import threading
 import time
 import os
-import sys
 from fluxvault import FluxNode
 
 BOOTFILES = ["quotes.txt", "readme.txt"]    # EDIT ME
 
-VAULT_NAME = os.getenv('VAULT_NAME')        # EDIT ME
+VAULT_HOST = os.getenv('VAULT_NAME')        # EDIT ME
 VAULT_PORT = os.getenv('VAULT_PORT')        # EDIT ME
 FILE_DIR = os.getenv('VAULT_FILE_DIR')      # EDIT ME
 
-if VAULT_NAME == None:
+if VAULT_HOST is None:
     VAULT_NAME = 'localhost'
-if VAULT_PORT == None:
+if VAULT_PORT is None:
     VAULT_PORT = 39898
 else:
     VAULT_PORT = int(VAULT_PORT)
-if FILE_DIR == None:
+if FILE_DIR is None:
     FILE_DIR = "/tmp/node/"
 
 class MyFluxNode(FluxNode):
     '''User class to allow easy congiguration, edit lines above  at EDIT ME'''
-    vault_name = VAULT_NAME
+    vault_name = VAULT_HOST
     user_files = BOOTFILES
     file_dir = FILE_DIR
 

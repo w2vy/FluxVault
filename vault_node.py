@@ -11,13 +11,13 @@ VAULT_PORT = os.getenv('VAULT_PORT')        # EDIT ME
 FILE_DIR = os.getenv('VAULT_FILE_DIR')      # EDIT ME
 BOOTFILES = ["quotes.txt", "readme.txt"]    # EDIT ME
 
-if VAULT_NAME == None:
+if VAULT_NAME is None:
     VAULT_NAME = 'localhost'
-if VAULT_PORT == None:
+if VAULT_PORT is None:
     VAULT_PORT = 39898
 else:
     VAULT_PORT = int(VAULT_PORT)
-if FILE_DIR == None:
+if FILE_DIR is None:
     FILE_DIR = "/tmp/node/"
 
 class MyFluxNode(FluxNode):
