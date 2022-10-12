@@ -13,7 +13,7 @@ VAULT_PORT = os.getenv('VAULT_PORT')        # EDIT ME
 FILE_DIR = os.getenv('VAULT_FILE_DIR')      # EDIT ME
 
 if VAULT_HOST is None:
-    VAULT_NAME = 'localhost'
+    VAULT_HOST = 'localhost'
 if VAULT_PORT is None:
     VAULT_PORT = 39898
 else:
@@ -53,14 +53,14 @@ class NodeKeyClient(socketserver.StreamRequestHandler):
 def node_server():
     '''This server runs on the Node, waiting for the Vault to connect'''
 
-    print("node_server ", VAULT_NAME)
+    print("node_server ", VAULT_HOST)
     with ThreadedTCPServer(('', VAULT_PORT), NodeKeyClient) as server:
         print("The NodeKeyClient server is running on port " + str(VAULT_PORT))
         server.serve_forever()
 
 if __name__ == '__main__':
     while True:
-        if VAULT_NAME == "localhost" and VAULT_PORT == 39289:
+        if VAULT_HOST == "localhost" and VAULT_PORT == 39289:
             print("Running in Demo Mode files will be placed in ", FILE_DIR)
         if os.path.isdir(FILE_DIR):
             print("Warning ", FILE_DIR, " exists")

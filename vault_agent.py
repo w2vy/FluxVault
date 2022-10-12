@@ -31,7 +31,7 @@ class MyFluxAgent(FluxAgent):
 def node_vault():
     '''Vault runs this to poll every Flux node running their app'''
     url = "https://api.runonflux.io/apps/location/" + APP_NAME
-    req = requests.get(url, 30)
+    req = requests.get(url, timeout=30)
     # Get the list of nodes where our app is deplolyed
     if req.status_code == 200:
         values = json.loads(req.text)
