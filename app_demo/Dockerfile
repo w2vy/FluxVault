@@ -1,7 +1,7 @@
 #FROM alpine:3.15
 FROM nginx:alpine
 
-COPY index.html /usr/share/nginx/html
+#COPY index.html /usr/share/nginx/html
 
 RUN mkdir /home/apptest
 WORKDIR /home/apptest

@@ -1,6 +1,8 @@
 #!/bin/sh
 
-echo Version 0.1 8/21/2022 p1test Vault $VAULT_DNS Port $FLUX_PORT
+echo Version 0.5 10/12/2022 p1test Vault $VAULT_NAME Port $VAULT_PORT
+
+nginx
 
 git clone https://github.com/RunOnFlux/FluxVault.git
 cd FluxVault
