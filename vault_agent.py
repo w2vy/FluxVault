@@ -13,16 +13,16 @@ FILE_DIR = os.getenv('VAULT_FILE_DIR')    # EDIT ME
 
 VERBOSE = True
 
-if VAULT_NAME is None:
-    VAULT_NAME = 'localhost'
 if VAULT_PORT is None:
     VAULT_PORT = 39898
 else:
     VAULT_PORT = int(VAULT_PORT)
-if APP_NAME is None:
-    APP_NAME = 'VaultDemo'
+if VAULT_NAME is None:
+    VAULT_NAME = 'localhost'
 if FILE_DIR is None:
     FILE_DIR = './files/'
+if APP_NAME is None:
+    APP_NAME = 'VaultDemo'
 
 class MyFluxAgent(FluxAgent):
     '''User class to allow easy configuration, see EDIT ME above'''
