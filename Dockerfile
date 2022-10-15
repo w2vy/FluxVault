@@ -1,7 +1,8 @@
 #FROM alpine:3.15
 FROM nginx:alpine
 
-#COPY index.html /usr/share/nginx/html
+# Maybe install custon default web page
+#COPY app_demo/index.html /usr/share/nginx/html
 
 RUN mkdir /home/apptest
 WORKDIR /home/apptest
@@ -14,8 +15,9 @@ RUN pip3 install --no-cache --upgrade pip setuptools
 RUN apk add gcc g++ make libffi-dev openssl-dev git
 RUN pip3 install pycryptodome
 RUN pip3 install requests
+# RUN pip3 install fluxvault
 
 # Copy our scripts
-COPY entrypoint.sh ./
-COPY ../vault_node.py ./
+COPY app_demo/entrypoint.sh ./
+COPY vault_node.py ./
 CMD ["/home/apptest/entrypoint.sh"]
