@@ -6,10 +6,11 @@ import time
 import os
 from fluxvault import FluxNode
 
+BOOTFILES = ["quotes.txt", "readme.txt"]    # EDIT ME
+
 VAULT_NAME = os.getenv('VAULT_NAME')        # EDIT ME
 VAULT_PORT = os.getenv('VAULT_PORT')        # EDIT ME
 FILE_DIR = os.getenv('VAULT_FILE_DIR')      # EDIT ME
-BOOTFILES = ["quotes.txt", "readme.txt"]    # EDIT ME
 
 if VAULT_NAME is None:
     VAULT_NAME = 'localhost'

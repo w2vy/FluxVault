@@ -7,16 +7,20 @@ import requests
 from fluxvault import FluxAgent
 
 VAULT_NAME = os.getenv('VAULT_NAME')      # EDIT ME
-VAULT_OPORT = os.getenv('VAULT_PORT')      # EDIT ME
-APP_NAME = os.getenv('VAULT_APP')        # EDIT ME
+VAULT_PORT = os.getenv('VAULT_PORT')      # EDIT ME
+APP_NAME = os.getenv('VAULT_APP')         # EDIT ME
 FILE_DIR = os.getenv('VAULT_FILE_DIR')    # EDIT ME
+
+VERBOSE = True
 
 if VAULT_NAME is None:
     VAULT_NAME = 'localhost'
-if VAULT_OPORT is None:
-    VAULT_OPORT = 39898
+if VAULT_PORT is None:
+    VAULT_PORT = 39898
 else:
-    VAULT_OPORT = int(VAULT_OPORT)
+    VAULT_PORT = int(VAULT_PORT)
+if APP_NAME is None:
+    APP_NAME = 'VaultDemo'
 if FILE_DIR is None:
     FILE_DIR = './files/'
 
@@ -25,8 +29,9 @@ class MyFluxAgent(FluxAgent):
     def __init__(self) -> None:
         super().__init__()
         self.vault_name = VAULT_NAME
-        self.vault_port = VAULT_OPORT
+        self.vault_port = VAULT_PORT
         self.file_dir = FILE_DIR
+        self.verbose = VERBOSE
 
 def node_vault():
     '''Vault runs this to poll every Flux node running their app'''
@@ -38,12 +43,15 @@ def node_vault():
         if values["status"] == "success":
             # json looks good and status correct, iterate through node list
             nodes = values["data"]
+
             for node in nodes:
                 agent = MyFluxAgent() # Each connection to a node get a fresh agent
                 ipadr = node['ip'].split(':')[0]
-                print(node['name'], ipadr)
+                if VERBOSE:
+                    print(node['name'], ipadr)
                 agent.node_vault_ip(ipadr)
-                print(node['name'], ipadr, agent.result)
+                if VERBOSE:
+                    print(node['name'], ipadr, agent.result)
         else:
             print("Error", req.text)
     else:

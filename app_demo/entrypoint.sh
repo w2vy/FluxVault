@@ -12,4 +12,4 @@ pip3 install ./FluxVault
 
 rm -f /tmp/node/quotes.txt /tmp/node/readme.txt
 
-python3 app_node.py
+python3 vault_node.py

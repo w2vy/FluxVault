@@ -17,5 +17,5 @@ RUN pip3 install requests
 
 # Copy our scripts
 COPY entrypoint.sh ./
-COPY app_node.py ./
+COPY ../vault_node.py ./
 CMD ["/home/apptest/entrypoint.sh"]
